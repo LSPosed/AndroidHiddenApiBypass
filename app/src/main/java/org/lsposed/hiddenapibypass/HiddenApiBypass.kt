@@ -1,6 +1,7 @@
 package org.lsposed.hiddenapibypass
 
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.util.Base64
 import android.util.Log
 import dalvik.system.InMemoryDexClassLoader
@@ -43,16 +44,28 @@ object HiddenApiBypass {
         val last = bDexFile - aDexFile
         val myDexCache = unsafe.getObject(this.javaClass, 16)
         val myDexFile = unsafe.getLong(myDexCache, 16)
+        val vmDexCache = unsafe.getObject(VMRuntime::class.java, 16)
+        val vmDexFile = unsafe.getLong(vmDexCache, 16)
 
-        val off = (last downTo last - 8).firstOrNull {
-            unsafe.getByte(myDexFile + it) == 2.toByte()
-        } ?: return false
-        Log.d("HiddenApiBypass", "offset: $off")
-        unsafe.putByte(myDexFile + off, 0)
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+            val off = (last downTo last - 8).firstOrNull {
+                unsafe.getByte(myDexFile + it) == 2.toByte()
+            } ?: return false
+            Log.d("HiddenApiBypass", "offset: $off")
+            unsafe.putByte(vmDexFile + off, 2)
 
-        VMRuntime.getRuntime().setHiddenApiExemptions(arrayOf("Landroid/"))
-        unsafe.putByte(myDexFile + off, 2)
+            VMRuntime.getRuntime().setHiddenApiExemptions(arrayOf("Landroid/"))
+            unsafe.putByte(vmDexFile + off, 0)
+        } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.P) {
+            val off = (last downTo last - 8).firstOrNull {
+                unsafe.getByte(vmDexFile + it) == 1.toByte()
+            } ?: return false
+            Log.d("HiddenApiBypass", "offset: $off")
+            unsafe.putByte(vmDexFile + off, 0)
 
+            VMRuntime.getRuntime().setHiddenApiExemptions(arrayOf("Landroid/"))
+            unsafe.putByte(vmDexFile + off, 1)
+        }
         return canAccessHiddenApi().also {
             Log.d("HiddenApiBypass", "bypass: $it")
         }
