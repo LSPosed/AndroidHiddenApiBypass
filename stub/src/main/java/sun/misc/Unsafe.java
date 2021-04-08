@@ -1,10 +1,6 @@
 package sun.misc;
 
 public class Unsafe {
-    public static Unsafe getUnsafe(){
-        throw new IllegalArgumentException("stub");
-    }
-
     public native long getLong(Object obj, long offset);
     public native void putLong(Object obj, long offset, long newValue);
     public native int getInt(Object obj, long offset);

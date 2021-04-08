@@ -1,32 +1,31 @@
 package org.lsposed.hiddenapibypass
 
+import android.app.Activity
 import android.content.pm.ApplicationInfo
-import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
+import android.widget.RelativeLayout
 import android.widget.TextView
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // Example of a call to a native method
-        findViewById<TextView>(R.id.sample_text).text = if (testByPass()) "success" else "fail"
+        val layout = RelativeLayout(this)
+        val textView = TextView(this)
+        val params = RelativeLayout.LayoutParams(
+            RelativeLayout.LayoutParams.WRAP_CONTENT,
+            RelativeLayout.LayoutParams.WRAP_CONTENT
+        )
+        textView.text = if (testByPass()) "success" else "fail"
+        params.addRule(RelativeLayout.CENTER_HORIZONTAL)
+        params.addRule(RelativeLayout.CENTER_VERTICAL)
+        layout.addView(textView, params)
+        setContentView(layout)
     }
 
     private fun canAccessHiddenApi() = runCatching {
         ApplicationInfo::class.java.getMethod("getHiddenApiEnforcementPolicy", *arrayOf())
     }.isSuccess
 
-    private fun testByPass(): Boolean {
-        return HiddenApiBypass.javaBypass("Landroid/") && canAccessHiddenApi()
-    }
-
-    companion object {
-        // Used to load the 'native-lib' library on application startup.
-        init {
-            System.loadLibrary("native-lib")
-        }
-    }
+    private fun testByPass() =
+        HiddenApiBypass.setHiddenApiExemptions("Landroid/") && canAccessHiddenApi()
 }

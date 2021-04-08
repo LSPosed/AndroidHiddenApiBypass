@@ -1,0 +1,2 @@
+-dontwarn dalvik.system.VMRuntime
+-keepclassmembers class org.lsposed.hiddenapibypass.Helper$* { *; }

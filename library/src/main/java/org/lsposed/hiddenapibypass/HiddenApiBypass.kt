@@ -9,13 +9,7 @@ import java.lang.reflect.Executable
 import java.lang.reflect.Method
 
 object HiddenApiBypass {
-    @JvmStatic
-    external fun setHiddenApiExemptions(vararg signaturePrefixes: String): Boolean
-    const val TAG = "HiddenApiBypass"
-
-    fun nativeBypass(vararg signaturePrefixes: String): Boolean {
-        return setHiddenApiExemptions(*signaturePrefixes);
-    }
+    private const val TAG = "HiddenApiBypass"
 
     private val unsafe: Unsafe = Unsafe::class.java.getDeclaredMethod("getUnsafe")(null) as Unsafe
     private val artOffset: Long =
@@ -65,7 +59,7 @@ object HiddenApiBypass {
 
     }
 
-    fun javaBypass(vararg signaturePrefixes: String): Boolean {
+    fun setHiddenApiExemptions(vararg signaturePrefixes: String): Boolean {
         val methods = getDeclaredMethods(VMRuntime::class.java)
         val getRuntime = methods.firstOrNull {
             it.name == "getRuntime"
