@@ -19,106 +19,75 @@ public class Helper {
         private MethodHandleInfo info = null;
     }
 
+    static final public class MethodHandleImplS extends MethodHandle {
+        private MethodHandleInfo info = null;
+    }
+
     static final public class HandleInfo {
         private final Member member = null;
         private final MethodHandle handle = null;
     }
 
-    static final public class DexCache {
-        /**
-         * The classloader this dex cache is for.
-         */
-        private ClassLoader classLoader;
-
-        /**
-         * The location of the associated dex file.
-         */
+    static final public class DexCacheP {
         private String location;
-
-        /**
-         * Holds C pointer to dexFile.
-         */
         private long dexFile;
-
-        /**
-         * References to pre resolved strings.
-         */
-        private long preResolvedStrings;
-
-        /**
-         * References to CallSite (C array pointer) as they become resolved following
-         * interpreter semantics.
-         */
         private long resolvedCallSites;
-
-        /**
-         * References to fields (C array pointer) as they become resolved following
-         * interpreter semantics. May refer to fields defined in other dex files.
-         */
         private long resolvedFields;
-
-        /**
-         * References to MethodType (C array pointer) as they become resolved following
-         * interpreter semantics.
-         */
         private long resolvedMethodTypes;
-
-        /**
-         * References to methods (C array pointer) as they become resolved following
-         * interpreter semantics. May refer to methods defined in other dex files.
-         */
         private long resolvedMethods;
-
-        /**
-         * References to types (C array pointer) as they become resolved following
-         * interpreter semantics. May refer to types defined in other dex files.
-         */
         private long resolvedTypes;
-
-        /**
-         * References to strings (C array pointer) as they become resolved following
-         * interpreter semantics. All strings are interned.
-         */
         private long strings;
-
-        /**
-         * The number of elements in the native pre resolved strings array.
-         */
-        private int numPreResolvedStrings;
-
-        /**
-         * The number of elements in the native call sites array.
-         */
         private int numResolvedCallSites;
-
-        /**
-         * The number of elements in the native resolvedFields array.
-         */
         private int numResolvedFields;
-
-        /**
-         * The number of elements in the native method types array.
-         */
         private int numResolvedMethodTypes;
-
-        /**
-         * The number of elements in the native resolvedMethods array.
-         */
         private int numResolvedMethods;
-
-        /**
-         * The number of elements in the native resolvedTypes array.
-         */
         private int numResolvedTypes;
-
-        /**
-         * The number of elements in the native strings array.
-         */
         private int numStrings;
+    }
 
-        // Only created by the VM.
-        private DexCache() {
-        }
+    static final public class DexCacheQ {
+        private String location;
+        private long dexFile;
+        private long preResolvedStrings;
+        private long resolvedCallSites;
+        private long resolvedFields;
+        private long resolvedMethodTypes;
+        private long resolvedMethods;
+        private long resolvedTypes;
+        private long strings;
+        private int numPreResolvedStrings;
+        private int numResolvedCallSites;
+        private int numResolvedFields;
+        private int numResolvedMethodTypes;
+        private int numResolvedMethods;
+        private int numResolvedTypes;
+        private int numStrings;
+    }
+
+    static final public class DexCacheR {
+        private ClassLoader classLoader;
+        private String location;
+        private long dexFile;
+        private long preResolvedStrings;
+        private long resolvedCallSites;
+        private long resolvedFields;
+        private long resolvedMethodTypes;
+        private long resolvedMethods;
+        private long resolvedTypes;
+        private long strings;
+        private int numPreResolvedStrings;
+        private int numResolvedCallSites;
+        private int numResolvedFields;
+        private int numResolvedMethodTypes;
+        private int numResolvedMethods;
+        private int numResolvedTypes;
+        private int numStrings;
+    }
+
+    static final public class DexFile {
+        private Object mCookie;
+        private Object mInternalCookie;
+        private final String mFileName = null;
     }
 
     public native void setHiddenApiExemptions(String[] signaturePrefixes);
