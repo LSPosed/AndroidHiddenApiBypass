@@ -16,7 +16,7 @@ public class Helper {
     }
 
     static final public class MethodHandleImpl extends MethodHandle {
-        private MethodHandleInfo info = null;
+        private final MethodHandleInfo info = null;
     }
 
     static final public class HandleInfo {
