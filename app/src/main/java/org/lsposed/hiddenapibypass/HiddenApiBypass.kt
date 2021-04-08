@@ -1,10 +1,8 @@
 package org.lsposed.hiddenapibypass
 
-import android.os.StrictMode
 import android.util.Log
 import dalvik.system.VMRuntime
 import sun.misc.Unsafe
-import java.lang.RuntimeException
 import java.lang.invoke.MethodHandleInfo
 import java.lang.invoke.MethodHandles
 import java.lang.reflect.Executable
@@ -19,26 +17,19 @@ object HiddenApiBypass {
         return setHiddenApiExemptions(*signaturePrefixes);
     }
 
-    private val unsafe: Unsafe
-    private val artOffset: Long
-    private val infoOffset: Long
-    private val methodsOffset: Long
-    private val memberOffset: Long
+    private val unsafe: Unsafe = Unsafe::class.java.getDeclaredMethod("getUnsafe")(null) as Unsafe
+    private val artOffset: Long =
+        unsafe.objectFieldOffset(Helper.MethodHandle::class.java.getDeclaredField("artFieldOrMethod"))
+    private val infoOffset: Long =
+        unsafe.objectFieldOffset(Helper.MethodHandleImpl::class.java.getDeclaredField("info"))
+    private val methodsOffset: Long =
+        unsafe.objectFieldOffset(Helper.Class::class.java.getDeclaredField("methods"))
+    private val memberOffset: Long =
+        unsafe.objectFieldOffset(Helper.HandleInfo::class.java.getDeclaredField("member"))
     private val size: Long
     private val bias: Long
 
     init {
-        unsafe = Unsafe::class.java.getDeclaredMethod("getUnsafe").invoke(null) as Unsafe
-
-        artOffset =
-            unsafe.objectFieldOffset(Helper.MethodHandle::class.java.getDeclaredField("artFieldOrMethod"))
-        infoOffset =
-            unsafe.objectFieldOffset(Helper.MethodHandleImpl::class.java.getDeclaredField("info"))
-        methodsOffset =
-            unsafe.objectFieldOffset(Helper.Class::class.java.getDeclaredField("methods"))
-        memberOffset =
-            unsafe.objectFieldOffset(Helper.HandleInfo::class.java.getDeclaredField("member"))
-
         val mhA =
             MethodHandles.lookup().unreflect(Helper.NeverCall::class.java.getDeclaredMethod("a"))
         val mhB =
