@@ -19,76 +19,41 @@ public class Helper {
         private MethodHandleInfo info = null;
     }
 
-    static final public class MethodHandleImplS extends MethodHandle {
-        private MethodHandleInfo info = null;
-    }
-
     static final public class HandleInfo {
         private final Member member = null;
         private final MethodHandle handle = null;
     }
 
-    static final public class DexCacheP {
-        private String location;
-        private long dexFile;
-        private long resolvedCallSites;
-        private long resolvedFields;
-        private long resolvedMethodTypes;
-        private long resolvedMethods;
-        private long resolvedTypes;
-        private long strings;
-        private int numResolvedCallSites;
-        private int numResolvedFields;
-        private int numResolvedMethodTypes;
-        private int numResolvedMethods;
-        private int numResolvedTypes;
-        private int numStrings;
+    static final public class Class {
+        private transient ClassLoader classLoader;
+        private transient java.lang.Class<?> componentType;
+        private transient Object dexCache;
+        private transient Object extData;
+        private transient Object[] ifTable;
+        private transient String name;
+        private transient java.lang.Class<?> superClass;
+        private transient Object vtable;
+        private transient long iFields;
+        private transient long methods;
+        private transient long sFields;
+        private transient int accessFlags;
+        private transient int classFlags;
+        private transient int classSize;
+        private transient int clinitThreadId;
+        private transient int dexClassDefIndex;
+        private transient volatile int dexTypeIndex;
+        private transient int numReferenceInstanceFields;
+        private transient int numReferenceStaticFields;
+        private transient int objectSize;
+        private transient int objectSizeAllocFastPath;
+        private transient int primitiveType;
+        private transient int referenceInstanceOffsets;
+        private transient int status;
+        private transient short copiedMethodsOffset;
+        private transient short virtualMethodsOffset;
     }
-
-    static final public class DexCacheQ {
-        private String location;
-        private long dexFile;
-        private long preResolvedStrings;
-        private long resolvedCallSites;
-        private long resolvedFields;
-        private long resolvedMethodTypes;
-        private long resolvedMethods;
-        private long resolvedTypes;
-        private long strings;
-        private int numPreResolvedStrings;
-        private int numResolvedCallSites;
-        private int numResolvedFields;
-        private int numResolvedMethodTypes;
-        private int numResolvedMethods;
-        private int numResolvedTypes;
-        private int numStrings;
+    public static class NeverCall {
+        static void a(){}
+        static void b(){}
     }
-
-    static final public class DexCacheR {
-        private ClassLoader classLoader;
-        private String location;
-        private long dexFile;
-        private long preResolvedStrings;
-        private long resolvedCallSites;
-        private long resolvedFields;
-        private long resolvedMethodTypes;
-        private long resolvedMethods;
-        private long resolvedTypes;
-        private long strings;
-        private int numPreResolvedStrings;
-        private int numResolvedCallSites;
-        private int numResolvedFields;
-        private int numResolvedMethodTypes;
-        private int numResolvedMethods;
-        private int numResolvedTypes;
-        private int numStrings;
-    }
-
-    static final public class DexFile {
-        private Object mCookie;
-        private Object mInternalCookie;
-        private final String mFileName = null;
-    }
-
-    public native void setHiddenApiExemptions(String[] signaturePrefixes);
 }

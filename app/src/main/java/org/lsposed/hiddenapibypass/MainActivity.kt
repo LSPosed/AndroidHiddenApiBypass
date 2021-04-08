@@ -20,7 +20,7 @@ class MainActivity : AppCompatActivity() {
     }.isSuccess
 
     private fun testByPass(): Boolean {
-        return HiddenApiBypass.javaBypass() && canAccessHiddenApi()
+        return HiddenApiBypass.javaBypass("Landroid/") && canAccessHiddenApi()
     }
 
     companion object {
