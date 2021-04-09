@@ -8,9 +8,12 @@ import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import dalvik.system.VMRuntime;
 import sun.misc.Unsafe;
@@ -40,7 +43,7 @@ public final class HiddenApiBypass {
             long bAddr = unsafe.getLong(mhB, artOffset);
             long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
             size = bAddr - aAddr;
-            Log.d(TAG, size + " " +
+            Log.v(TAG, size + " " +
                     Long.toString(aAddr, 16) + ", " +
                     Long.toString(bAddr, 16) + ", " +
                     Long.toString(aMethods, 16));
@@ -52,6 +55,7 @@ public final class HiddenApiBypass {
 
     public static List<Executable> getDeclaredMethods(Class<?> clazz) {
         ArrayList<Executable> list = new ArrayList<>();
+        if (clazz.isPrimitive() || clazz.isArray()) return list;
         MethodHandle mh;
         try {
             mh = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
@@ -71,7 +75,7 @@ public final class HiddenApiBypass {
             }
             MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
             Executable member = (Executable) unsafe.getObject(info, memberOffset);
-            Log.d(TAG, "got " + clazz + " , " + member);
+            Log.v(TAG, "got " + clazz.getTypeName() + "." + member + "(" + Arrays.stream(member.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             list.add(member);
         }
         return list;
