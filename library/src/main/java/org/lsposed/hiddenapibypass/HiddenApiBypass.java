@@ -1,5 +1,25 @@
+/*
+ *  This file is part of LSPosed.
+ *
+ *  LSPosed is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  LSPosed is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with LSPosed.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *  Copyright (C) 2021 LSPosed Contributors
+ */
+
 package org.lsposed.hiddenapibypass;
 
+import android.os.Build;
 import android.util.Log;
 
 import java.lang.invoke.MethodHandle;
@@ -29,33 +49,47 @@ public final class HiddenApiBypass {
     private static final long bias;
 
     static {
-        try {
-            //noinspection JavaReflectionMemberAccess
-            unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
-            assert unsafe != null;
-            artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
-            infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
-            methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
-            memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
-            MethodHandle mhA = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
-            MethodHandle mhB = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("b"));
-            long aAddr = unsafe.getLong(mhA, artOffset);
-            long bAddr = unsafe.getLong(mhB, artOffset);
-            long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
-            size = bAddr - aAddr;
-            Log.v(TAG, size + " " +
-                    Long.toString(aAddr, 16) + ", " +
-                    Long.toString(bAddr, 16) + ", " +
-                    Long.toString(aMethods, 16));
-            bias = aAddr - aMethods - size;
-        } catch (ReflectiveOperationException e) {
-            throw new ExceptionInInitializerError(e);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                //noinspection JavaReflectionMemberAccess
+                unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
+                assert unsafe != null;
+                artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
+                infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
+                methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
+                memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
+                MethodHandle mhA = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
+                MethodHandle mhB = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("b"));
+                long aAddr = unsafe.getLong(mhA, artOffset);
+                long bAddr = unsafe.getLong(mhB, artOffset);
+                long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
+                size = bAddr - aAddr;
+                Log.v(TAG, size + " " +
+                        Long.toString(aAddr, 16) + ", " +
+                        Long.toString(bAddr, 16) + ", " +
+                        Long.toString(aMethods, 16));
+                bias = aAddr - aMethods - size;
+            } catch (ReflectiveOperationException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+        } else {
+            unsafe = null;
+            artOffset = infoOffset = methodsOffset = memberOffset = size = bias = -1;
         }
     }
 
+    /**
+     * get declared methods of given class without hidden api restriction
+     *
+     * @param clazz the class to fetch declared methods
+     * @return list of declared methods of {@code clazz}
+     */
     public static List<Executable> getDeclaredMethods(Class<?> clazz) {
         ArrayList<Executable> list = new ArrayList<>();
         if (clazz.isPrimitive() || clazz.isArray()) return list;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return Arrays.asList(clazz.getDeclaredMethods());
+        }
         MethodHandle mh;
         try {
             mh = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
@@ -81,7 +115,16 @@ public final class HiddenApiBypass {
         return list;
     }
 
+    /**
+     * Sets the list of exemptions from hidden API access enforcement.
+     *
+     * @param signaturePrefixes A list of signature prefixes. Each item in the list is a prefix match on the type
+     *                          signature of a blacklisted API. All matching APIs are treated as if they were on
+     *                          the whitelist: access permitted, and no logging..
+     * @return whether the operation is successful
+     */
     public static boolean setHiddenApiExemptions(String... signaturePrefixes) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true;
         List<Executable> methods = getDeclaredMethods(VMRuntime.class);
         Optional<Executable> getRuntime = methods.stream().filter(it -> it.getName().equals("getRuntime")).findFirst();
         Optional<Executable> setHiddenApiExemptions = methods.stream().filter(it -> it.getName().equals("setHiddenApiExemptions")).findFirst();
