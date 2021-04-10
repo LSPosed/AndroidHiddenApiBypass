@@ -1,8 +1,7 @@
 name: Maven
 
 on:
-  label:
-    types: [created]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,3 +16,8 @@ jobs:
         java-version: '11'
     - name: Build with Gradle
       run: ./gradlew publish
+      env:
+        ORG_GRADLE_PROJECT_signingKey: ${{ secrets.signingKey }}
+        ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.signingPassword }}
+        ORG_GRADLE_PROJECT_ossrhUsername: ${{ secrets.ossrhUsername }}
+        ORG_GRADLE_PROJECT_ossrhPassword: ${{ secrets.ossrhPassword }}
