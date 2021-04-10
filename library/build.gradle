@@ -65,7 +65,7 @@ publishing {
         mavenJava(MavenPublication) {
             group 'org.lsposed.hiddenapibypass'
             artifactId 'hiddenapibypass'
-            version '1.0'
+            version android.defaultConfig.versionName
             afterEvaluate { from components.release }
             artifact generateSourcesJar
             artifact javadocJar
@@ -101,7 +101,6 @@ publishing {
 }
 
 signing {
-    def signingKeyId = findProperty("signingKeyId")
     def signingKey = findProperty("signingKey")
     def signingPassword = findProperty("signingPassword")
     def secretKeyRingFile = findProperty("signing.secretKeyRingFile")
@@ -109,7 +108,7 @@ signing {
     if (secretKeyRingFile != null && file(secretKeyRingFile).exists()) {
         sign publishing.publications
     } else if (signingKey != null) {
-        useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+        useInMemoryPgpKeys(signingKey, signingPassword)
         sign publishing.publications
     }
 }
