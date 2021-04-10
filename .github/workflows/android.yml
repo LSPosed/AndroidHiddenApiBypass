@@ -22,6 +22,9 @@ jobs:
       run: |
         ./gradlew aR
         ./gradlew publishToMavenLocal
+      env:
+        ORG_GRADLE_PROJECT_signingKey: ${{ secrets.signingKey }}
+        ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.signingPassword }}
     - name: Upload app
       uses: actions/upload-artifact@v2
       with:
