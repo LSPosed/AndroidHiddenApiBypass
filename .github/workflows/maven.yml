@@ -1,0 +1,19 @@
+name: Maven
+
+on:
+  label:
+    types: [created]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out
+      uses: actions/checkout@v2
+    - name: Set up JDK 11
+      uses: actions/setup-java@v1
+      with:
+        java-version: '11'
+    - name: Build with Gradle
+      run: ./gradlew publish
