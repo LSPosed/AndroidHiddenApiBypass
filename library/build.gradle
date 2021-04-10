@@ -1,5 +1,7 @@
 plugins {
     id 'com.android.library'
+    id 'maven-publish'
+    id 'signing'
 }
 
 android {
@@ -34,4 +36,80 @@ android {
 dependencies {
     compileOnly project(":stub")
     compileOnly 'androidx.annotation:annotation:1.2.0'
+}
+
+task generateSourcesJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier 'sources'
+}
+
+task generateJavadoc(type: Javadoc) {
+    source android.sourceSets.main.java.srcDirs
+    classpath += files(android.getBootClasspath())
+    afterEvaluate {
+        classpath += files(android.libraryVariants.collect { v ->
+            v.javaCompileProvider.get().classpath
+        })
+    }
+    options.encoding 'UTF-8'
+}
+
+task javadocJar(type: Jar) {
+    dependsOn generateJavadoc
+    from generateJavadoc.destinationDir
+    classifier 'javadoc'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            group 'org.lsposed.hiddenapibypass'
+            artifactId 'hiddenapibypass'
+            version '1.0'
+            afterEvaluate { from components.release }
+            artifact generateSourcesJar
+            artifact javadocJar
+            pom {
+                name = 'Android Hidden Api Bypass'
+                description = 'Bypass restrictions on non-SDK interfaces'
+                url = 'https://github.com/LSPosed/AndroidHiddenApiBypass'
+                licenses {
+                    license {
+                        name = 'The Apache Software License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        name = 'Lsposed'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:https://github.com/LSPosed/AndroidHiddenApiBypass.git'
+                    url = 'https://github.com/LSPosed/AndroidHiddenApiBypass'
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name 'ossrh'
+            url 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
+            credentials(PasswordCredentials)
+        }
+    }
+}
+
+signing {
+    def signingKeyId = findProperty("signingKeyId")
+    def signingKey = findProperty("signingKey")
+    def signingPassword = findProperty("signingPassword")
+    def secretKeyRingFile = findProperty("signing.secretKeyRingFile")
+
+    if (secretKeyRingFile != null && file(secretKeyRingFile).exists()) {
+        sign publishing.publications
+    } else if (signingKey != null) {
+        useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+        sign publishing.publications
+    }
 }
