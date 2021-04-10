@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "org.lsposed.hiddenapibypass"
-        minSdk 28
+        minSdk 14
         targetSdk 30
         versionCode 1
         versionName "1.0"
@@ -45,4 +45,5 @@ android {
 
 dependencies {
     implementation project(":library")
+    compileOnly 'androidx.annotation:annotation:1.2.0'
 }

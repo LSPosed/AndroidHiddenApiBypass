@@ -19,6 +19,8 @@ package org.lsposed.hiddenapibypass;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.RequiresApi;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodHandles;
@@ -35,6 +37,7 @@ import java.util.stream.Collectors;
 import dalvik.system.VMRuntime;
 import sun.misc.Unsafe;
 
+@RequiresApi(Build.VERSION_CODES.P)
 public final class HiddenApiBypass {
     private static final String TAG = "HiddenApiBypass";
     private static final Unsafe unsafe;
@@ -46,32 +49,27 @@ public final class HiddenApiBypass {
     private static final long bias;
 
     static {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                //noinspection JavaReflectionMemberAccess
-                unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
-                assert unsafe != null;
-                artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
-                infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
-                methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
-                memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
-                MethodHandle mhA = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
-                MethodHandle mhB = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("b"));
-                long aAddr = unsafe.getLong(mhA, artOffset);
-                long bAddr = unsafe.getLong(mhB, artOffset);
-                long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
-                size = bAddr - aAddr;
-                Log.v(TAG, size + " " +
-                        Long.toString(aAddr, 16) + ", " +
-                        Long.toString(bAddr, 16) + ", " +
-                        Long.toString(aMethods, 16));
-                bias = aAddr - aMethods - size;
-            } catch (ReflectiveOperationException e) {
-                throw new ExceptionInInitializerError(e);
-            }
-        } else {
-            unsafe = null;
-            artOffset = infoOffset = methodsOffset = memberOffset = size = bias = -1;
+        try {
+            //noinspection JavaReflectionMemberAccess
+            unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
+            assert unsafe != null;
+            artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
+            infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
+            methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
+            memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
+            MethodHandle mhA = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
+            MethodHandle mhB = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("b"));
+            long aAddr = unsafe.getLong(mhA, artOffset);
+            long bAddr = unsafe.getLong(mhB, artOffset);
+            long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
+            size = bAddr - aAddr;
+            Log.v(TAG, size + " " +
+                    Long.toString(aAddr, 16) + ", " +
+                    Long.toString(bAddr, 16) + ", " +
+                    Long.toString(aMethods, 16));
+            bias = aAddr - aMethods - size;
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
         }
     }
 
@@ -84,9 +82,6 @@ public final class HiddenApiBypass {
     public static List<Executable> getDeclaredMethods(Class<?> clazz) {
         ArrayList<Executable> list = new ArrayList<>();
         if (clazz.isPrimitive() || clazz.isArray()) return list;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            return Arrays.asList(clazz.getDeclaredMethods());
-        }
         MethodHandle mh;
         try {
             mh = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
@@ -121,7 +116,6 @@ public final class HiddenApiBypass {
      * @return whether the operation is successful
      */
     public static boolean setHiddenApiExemptions(String... signaturePrefixes) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true;
         List<Executable> methods = getDeclaredMethods(VMRuntime.class);
         Optional<Executable> getRuntime = methods.stream().filter(it -> it.getName().equals("getRuntime")).findFirst();
         Optional<Executable> setHiddenApiExemptions = methods.stream().filter(it -> it.getName().equals("setHiddenApiExemptions")).findFirst();

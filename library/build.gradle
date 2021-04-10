@@ -7,7 +7,7 @@ android {
     buildToolsVersion "30.0.3"
 
     defaultConfig {
-        minSdk 19
+        minSdk 1
         targetSdk 30
         versionCode 1
         versionName "1.0"
@@ -33,4 +33,5 @@ android {
 
 dependencies {
     compileOnly project(":stub")
+    compileOnly 'androidx.annotation:annotation:1.2.0'
 }
