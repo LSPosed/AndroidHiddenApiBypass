@@ -8,3 +8,5 @@
     boolean setHiddenApiExemptions(java.lang.String[]);
 }
 -keep class org.lsposed.hiddenapibypass.Helper$* { *; }
+
+-keepattributes *Annotation*

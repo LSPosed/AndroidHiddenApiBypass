@@ -21,7 +21,7 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:1.1'
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:1.2'
 }
 ```
 
