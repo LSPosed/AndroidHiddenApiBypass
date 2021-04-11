@@ -7,4 +7,5 @@
     java.util.List getDeclaredMethods(java.lang.Class);
     boolean setHiddenApiExemptions(java.lang.String[]);
 }
--keepclassmembers class org.lsposed.hiddenapibypass.Helper$* { *; }
+-keep class org.lsposed.hiddenapibypass.Helper$* { *; }
+-keepattributes *Annotations
