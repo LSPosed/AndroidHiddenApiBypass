@@ -21,6 +21,8 @@ import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 
+import org.lsposed.hiddenapibypass.library.BuildConfig;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodHandles;
@@ -63,7 +65,7 @@ public final class HiddenApiBypass {
             long bAddr = unsafe.getLong(mhB, artOffset);
             long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
             size = bAddr - aAddr;
-            Log.v(TAG, size + " " +
+            if (BuildConfig.DEBUG) Log.v(TAG, size + " " +
                     Long.toString(aAddr, 16) + ", " +
                     Long.toString(bAddr, 16) + ", " +
                     Long.toString(aMethods, 16));
@@ -90,7 +92,7 @@ public final class HiddenApiBypass {
         }
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
-        Log.d(TAG, clazz + " has " + numMethods + " methods");
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * size + bias;
             unsafe.putLong(mh, artOffset, method);
@@ -101,7 +103,8 @@ public final class HiddenApiBypass {
             }
             MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
             Executable member = (Executable) unsafe.getObject(info, memberOffset);
-            Log.v(TAG, "got " + clazz.getTypeName() + "." + member + "(" + Arrays.stream(member.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
+            if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + member +
+                    "(" + Arrays.stream(member.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             list.add(member);
         }
         return list;

@@ -12,7 +12,7 @@ android {
         minSdk 1
         targetSdk 30
         versionCode 1
-        versionName "1.0"
+        versionName "1.1"
         consumerProguardFiles "consumer-rules.pro"
     }
     buildTypes {
@@ -38,26 +38,35 @@ dependencies {
     compileOnly 'androidx.annotation:annotation:1.2.0'
 }
 
-task generateSourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier 'sources'
-}
-
-task generateJavadoc(type: Javadoc) {
-    source android.sourceSets.main.java.srcDirs
-    classpath += files(android.getBootClasspath())
-    afterEvaluate {
-        classpath += files(android.libraryVariants.collect { v ->
-            v.javaCompileProvider.get().classpath
-        })
+afterEvaluate {
+    android.libraryVariants.collect { variant ->
+        task("generate${variant.name.capitalize()}SourcesJar", type: Jar) {
+            from variant.javaCompileProvider.get().source
+            exclude '**/BuildConfig.java'
+            classifier 'sources'
+        }
+        task("generate${variant.name.capitalize()}Javadoc", type: Javadoc) {
+            if (JavaVersion.current() >= JavaVersion.VERSION_1_9) {
+                options.addStringOption "-release", "8"
+            }
+            source variant.javaCompileProvider.get().source
+            exclude '**/BuildConfig.java'
+            classpath += variant.javaCompileProvider.get().classpath
+            classpath += files(android.getBootClasspath())
+            classpath += tasks.getByName("generate${variant.name.capitalize()}BuildConfig").getOutputs().files
+            options {
+                failOnError false
+                encoding 'UTF-8'
+                links 'https://docs.oracle.com/javase/8/docs/api/'
+                links 'https://developer.android.com/reference/androidx/'
+            }
+        }
+        task("generate${variant.name.capitalize()}JavadocJar", type: Jar) {
+            dependsOn "generate${variant.name.capitalize()}Javadoc"
+            from tasks.getByName("generate${variant.name.capitalize()}Javadoc").destinationDir
+            classifier 'javadoc'
+        }
     }
-    options.encoding 'UTF-8'
-}
-
-task javadocJar(type: Jar) {
-    dependsOn generateJavadoc
-    from generateJavadoc.destinationDir
-    classifier 'javadoc'
 }
 
 publishing {
@@ -66,9 +75,11 @@ publishing {
             group 'org.lsposed.hiddenapibypass'
             artifactId 'hiddenapibypass'
             version android.defaultConfig.versionName
-            afterEvaluate { from components.release }
-            artifact generateSourcesJar
-            artifact javadocJar
+            afterEvaluate {
+                artifact tasks.getByName("bundleReleaseAar")
+                artifact tasks.getByName("generateReleaseJavadocJar")
+                artifact tasks.getByName("generateReleaseSourcesJar")
+            }
             pom {
                 name = 'Android Hidden Api Bypass'
                 description = 'Bypass restrictions on non-SDK interfaces'
@@ -95,7 +106,7 @@ publishing {
         maven {
             name 'ossrh'
             url 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
-            credentials(PasswordCredentials)
+            credentials PasswordCredentials
         }
     }
 }

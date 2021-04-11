@@ -20,8 +20,8 @@ jobs:
         java-version: '11'
     - name: Build with Gradle
       run: |
-        ./gradlew aR
         ./gradlew publishToMavenLocal
+        ./gradlew :app:aR
       env:
         ORG_GRADLE_PROJECT_signingKey: ${{ secrets.signingKey }}
         ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.signingPassword }}
