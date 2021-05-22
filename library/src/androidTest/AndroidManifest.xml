@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:tools="http://schemas.android.com/tools"
+    package="org.lsposed.hiddenapibypass">
+
+    <uses-sdk tools:overrideLibrary="
+    androidx.test.ext.junit,
+    androidx.test.rules,
+    androidx.test.runner,
+    androidx.test.core,
+    androidx.test.monitor" />
+</manifest>

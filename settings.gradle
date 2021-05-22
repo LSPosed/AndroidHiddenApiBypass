@@ -1,4 +1,3 @@
 include ':stub'
 include ':library'
-include ':app'
 rootProject.name = "HiddenApiBypass"
