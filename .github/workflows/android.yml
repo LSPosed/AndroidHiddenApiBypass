@@ -42,4 +42,4 @@ jobs:
       - name: Build with Gradle
         run: |
           (echo y; echo y; echo y; echo y; echo y)|$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
-          ./gradlew pGDAT
+          ./gradlew pGDAT --info

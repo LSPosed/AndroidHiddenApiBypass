@@ -58,6 +58,9 @@ android {
                 targetDevices.addAll(devices)
             }
         }
+        emulatorSnapshots {
+            enableForTestFailures false
+        }
     }
 
 }
