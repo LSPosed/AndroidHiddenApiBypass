@@ -41,5 +41,6 @@ jobs:
           java-version: '11'
       - name: Build with Gradle
         run: |
-          yes|$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          echo test
           ./gradlew pGDAT
