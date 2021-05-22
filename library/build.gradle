@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.ManagedVirtualDevice
+
 plugins {
     id 'com.android.library'
     id 'maven-publish'
@@ -11,9 +13,10 @@ android {
     defaultConfig {
         minSdk 1
         targetSdk 30
-        versionCode 1
-        versionName "1.1"
+        versionCode 2
+        versionName "2.0"
         consumerProguardFiles "consumer-rules.pro"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         release {
@@ -31,11 +34,40 @@ android {
             excludes += '/*.properties'
         }
     }
+
+    testOptions {
+        devices {
+            api30(ManagedVirtualDevice) {
+                device = "Pixel 2"
+                apiLevel = 30
+                abi = "x86_64"
+            }
+            api29(ManagedVirtualDevice) {
+                device = "Pixel 2"
+                apiLevel = 29
+                abi = "x86_64"
+            }
+            api28(ManagedVirtualDevice) {
+                device = "Pixel 2"
+                apiLevel = 28
+                abi = "x86_64"
+            }
+        }
+        deviceGroups {
+            phones {
+                targetDevices.addAll(devices)
+            }
+        }
+    }
+
 }
 
 dependencies {
     compileOnly project(":stub")
     compileOnly 'androidx.annotation:annotation:1.2.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.2'
+    androidTestImplementation 'androidx.test:rules:1.3.0'
+    androidTestCompileOnly project(":stub")
 }
 
 afterEvaluate {

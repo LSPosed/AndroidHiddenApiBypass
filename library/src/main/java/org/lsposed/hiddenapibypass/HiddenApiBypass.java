@@ -32,8 +32,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import dalvik.system.VMRuntime;
@@ -49,10 +51,11 @@ public final class HiddenApiBypass {
     private static final long memberOffset;
     private static final long size;
     private static final long bias;
+    private static final Set<String> signaturePrefixes = new HashSet<>();
 
     static {
         try {
-            //noinspection JavaReflectionMemberAccess
+            //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
             assert unsafe != null;
             artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
@@ -113,7 +116,7 @@ public final class HiddenApiBypass {
     /**
      * Sets the list of exemptions from hidden API access enforcement.
      *
-     * @param signaturePrefixes A list of signature prefixes. Each item in the list is a prefix match on the type
+     * @param signaturePrefixes A list of class signature prefixes. Each item in the list is a prefix match on the type
      *                          signature of a blacklisted API. All matching APIs are treated as if they were on
      *                          the whitelist: access permitted, and no logging..
      * @return whether the operation is successful
@@ -133,5 +136,30 @@ public final class HiddenApiBypass {
             }
         }
         return false;
+    }
+
+    /**
+     * Adds the list of exemptions from hidden API access enforcement.
+     *
+     * @param signaturePrefixes A list of class signature prefixes. Each item in the list is a prefix match on the type
+     *                          signature of a blacklisted API. All matching APIs are treated as if they were on
+     *                          the whitelist: access permitted, and no logging..
+     * @return whether the operation is successful
+     */
+    public static boolean addHiddenApiExemptions(String... signaturePrefixes) {
+        HiddenApiBypass.signaturePrefixes.addAll(Arrays.asList(signaturePrefixes));
+        String[] strings = new String[HiddenApiBypass.signaturePrefixes.size()];
+        HiddenApiBypass.signaturePrefixes.toArray(strings);
+        return setHiddenApiExemptions(strings);
+    }
+
+    /**
+     * Clear the list of exemptions from hidden API access enforcement.
+     *
+     * @return whether the operation is successful
+     */
+    public static boolean clearHiddenApiExemptions() {
+        HiddenApiBypass.signaturePrefixes.clear();
+        return setHiddenApiExemptions("");
     }
 }

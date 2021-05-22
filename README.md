@@ -21,7 +21,7 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:1.1'
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:2.0'
 }
 ```
 
@@ -29,10 +29,9 @@ dependencies {
 
 ```java
 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-    HiddenApiBypass.setHiddenApiExemptions("L");
+    HiddenApiBypass.addHiddenApiExemptions("L");
 }
 ```
-You can also refer to the [sample app](app/src/main/java/org/lsposed/hiddenapibypass/MainActivity.java).
 
 ## License
 
