@@ -40,4 +40,6 @@ jobs:
         with:
           java-version: '11'
       - name: Build with Gradle
-        run: ./gradlew pGDAT
+        run: |
+          yes|$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          ./gradlew pGDAT
