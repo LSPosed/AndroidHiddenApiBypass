@@ -60,6 +60,7 @@ android {
         }
         emulatorSnapshots {
             enableForTestFailures false
+            maxSnapshotsForTestFailures 0
         }
     }
 
