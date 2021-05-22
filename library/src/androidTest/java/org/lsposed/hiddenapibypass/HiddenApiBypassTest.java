@@ -59,10 +59,10 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void EclearedHistorySettings() throws NoSuchMethodException {
+    public void EclearHiddenApiExemptions() throws NoSuchMethodException {
         exception.expect(NoSuchMethodException.class);
         exception.expectMessage(containsString("setHiddenApiExemptions"));
-        assertTrue(HiddenApiBypass.setHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
+        assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
         ApplicationInfo.class.getMethod("usesNonSdkApi");
         assertTrue(HiddenApiBypass.clearHiddenApiExemptions());
         VMRuntime.class.getMethod("setHiddenApiExemptions", String.class);

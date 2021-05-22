@@ -42,7 +42,7 @@ jobs:
       - name: Build with Gradle
         run: |
           (echo y; echo y; echo y; echo y; echo y)|$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
-          ./gradlew pGDAT --stacktrace||true
+          ./gradlew pGC --stacktrace||true
       - name: Upload test results
         uses: actions/upload-artifact@v2
         with:
