@@ -65,7 +65,7 @@ public class HiddenApiBypassTest {
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
         ApplicationInfo.class.getMethod("usesNonSdkApi");
         assertTrue(HiddenApiBypass.clearHiddenApiExemptions());
-        VMRuntime.class.getMethod("setHiddenApiExemptions", String.class);
+        VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
     }
 
     @Test
