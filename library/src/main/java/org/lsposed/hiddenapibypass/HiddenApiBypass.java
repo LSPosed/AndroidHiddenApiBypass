@@ -155,11 +155,13 @@ public final class HiddenApiBypass {
 
     /**
      * Clear the list of exemptions from hidden API access enforcement.
+     * Android runtime will cache access flags, so if a hidden API has been accessed unrestrictedly,
+     * running this method will not restore the restriction on it.
      *
      * @return whether the operation is successful
      */
     public static boolean clearHiddenApiExemptions() {
         HiddenApiBypass.signaturePrefixes.clear();
-        return setHiddenApiExemptions("");
+        return setHiddenApiExemptions();
     }
 }

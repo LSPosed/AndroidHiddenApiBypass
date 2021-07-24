@@ -29,7 +29,7 @@ dependencies {
 
 ```java
 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-    HiddenApiBypass.addHiddenApiExemptions("L");
+    HiddenApiBypass.addHiddenApiExemptions("");
 }
 ```
 
