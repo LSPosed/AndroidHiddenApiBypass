@@ -35,7 +35,9 @@ android {
         }
     }
     publishing {
-        singleVariant("release")
+        singleVariant("release"){
+            withSourcesJar()
+        }
     }
 
     testOptions {
@@ -84,13 +86,8 @@ dependencies {
 
 afterEvaluate {
     android.libraryVariants.collect { variant ->
-        task("generate${variant.name.capitalize()}SourcesJar", type: Jar) {
-            from variant.javaCompileProvider.get().source
-            exclude '**/BuildConfig.java'
-            classifier 'sources'
-        }
         task("generate${variant.name.capitalize()}Javadoc", type: Javadoc) {
-            if (JavaVersion.current() >= JavaVersion.VERSION_1_9) {
+            if (JavaVersion.current() > JavaVersion.VERSION_1_8) {
                 options.addStringOption "-release", "8"
             }
             source variant.javaCompileProvider.get().source
@@ -120,9 +117,8 @@ publishing {
             artifactId 'hiddenapibypass'
             version android.defaultConfig.versionName
             afterEvaluate {
-                artifact tasks.getByName("bundleReleaseAar")
+                from components.release
                 artifact tasks.getByName("generateReleaseJavadocJar")
-                artifact tasks.getByName("generateReleaseSourcesJar")
             }
             pom {
                 name = 'Android Hidden Api Bypass'
