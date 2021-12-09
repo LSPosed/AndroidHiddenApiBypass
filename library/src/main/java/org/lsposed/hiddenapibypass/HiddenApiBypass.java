@@ -90,7 +90,8 @@ public final class HiddenApiBypass {
      * @return the new instance
      */
     public static Object newInstance(Class<?> clazz, Object... initargs) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
-        Constructor<?> stub = Helper.InvokeStub.class.getDeclaredConstructor(Object[].class);
+        Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
+        Constructor<?> ctor = Helper.InvokeStub.class.getDeclaredConstructor(Object[].class);
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
         checkMethod:
@@ -98,12 +99,13 @@ public final class HiddenApiBypass {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
             if ("<init>".equals(stub.getName())) {
-                Class<?>[] params = stub.getParameterTypes();
+                unsafe.putLong(ctor, methodOffset, method);
+                Class<?>[] params = ctor.getParameterTypes();
                 if (params.length != initargs.length) continue;
                 for (int j = 0; j < params.length; ++j) {
                     if (!params[j].isInstance(initargs[j])) continue checkMethod;
                 }
-                return stub.newInstance(initargs);
+                return ctor.newInstance(initargs);
             }
         }
         throw new NoSuchMethodException("Cannot find matching method");
@@ -194,7 +196,7 @@ public final class HiddenApiBypass {
             invoke(VMRuntime.class, runtime, "setHiddenApiExemptions", (Object) signaturePrefixes);
             return true;
         } catch (Throwable e) {
-            Log.e(TAG, "invoke", e);
+            Log.w(TAG, "invoke", e);
             return false;
         }
     }
