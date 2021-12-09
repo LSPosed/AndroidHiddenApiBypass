@@ -5,6 +5,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ModuleInfo;
 import android.os.Build;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -26,7 +27,7 @@ import dalvik.system.VMRuntime;
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@SdkSuppress(minSdkVersion = Build.VERSION_CODES.P)
+@SdkSuppress(minSdkVersion = Build.VERSION_CODES.Q)
 @RunWith(AndroidJUnit4.class)
 public class HiddenApiBypassTest {
 
@@ -53,8 +54,8 @@ public class HiddenApiBypassTest {
     }
 
     @Test(expected = NoSuchMethodException.class)
-    public void DnewIActivityManagerDefault() throws NoSuchMethodException, ClassNotFoundException {
-        Class.forName("android.app.IActivityManager$Default").getDeclaredConstructor();
+    public void DnewModuleInfo() throws NoSuchMethodException {
+        ModuleInfo.class.getDeclaredConstructor();
     }
 
     @Test
@@ -63,10 +64,9 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void FnewIActivityManagerStubWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ClassNotFoundException, InstantiationException {
-        Class<?> stub = Class.forName("android.app.IActivityManager$Default");
-        Object instance = HiddenApiBypass.newInstance(stub);
-        assertSame(instance.getClass(), stub);
+    public void FnewModuleInfoWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
+        Object instance = HiddenApiBypass.newInstance(ModuleInfo.class);
+        assertSame(instance.getClass(), ModuleInfo.class);
     }
 
     @Test
