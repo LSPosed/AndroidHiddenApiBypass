@@ -26,6 +26,7 @@ import org.lsposed.hiddenapibypass.library.BuildConfig;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -34,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -45,6 +45,7 @@ import sun.misc.Unsafe;
 public final class HiddenApiBypass {
     private static final String TAG = "HiddenApiBypass";
     private static final Unsafe unsafe;
+    private static final long methodOffset;
     private static final long artOffset;
     private static final long infoOffset;
     private static final long methodsOffset;
@@ -58,6 +59,7 @@ public final class HiddenApiBypass {
             //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
             assert unsafe != null;
+            methodOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("artMethod"));
             artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
             infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
             methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
@@ -76,6 +78,71 @@ public final class HiddenApiBypass {
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
+    }
+
+    /**
+     * create an instance of the given class {@code clazz} calling the restricted constructor with arguments {@code args}
+     *
+     * @see Constructor#newInstance(Object...)
+     *
+     * @param clazz the class of the instance to new
+     * @param initargs arguments to call constructor
+     * @return the new instance
+     */
+    public static Object newInstance(Class<?> clazz, Object... initargs) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
+        Constructor<?> stub = Helper.InvokeStub.class.getDeclaredConstructor(Object[].class);
+        long methods = unsafe.getLong(clazz, methodsOffset);
+        int numMethods = unsafe.getInt(methods);
+        checkMethod:
+        for (int i = 0; i < numMethods; i++) {
+            long method = methods + i * size + bias;
+            unsafe.putLong(stub, methodOffset, method);
+            if ("<init>".equals(stub.getName())) {
+                Class<?>[] params = stub.getParameterTypes();
+                if (params.length != initargs.length) continue;
+                for (int j = 0; j < params.length; ++j) {
+                    if (!params[j].isInstance(initargs[j])) continue checkMethod;
+                }
+                return stub.newInstance(initargs);
+            }
+        }
+        throw new NoSuchMethodException("Cannot find matching method");
+    }
+
+    /**
+     * invoke a restrict method named {@code methodName} of the given class {@code clazz} with this object {@code thiz} and arguments {@code args}
+     *
+     * @see Method#invoke(Object, Object...)
+     *
+     * @param clazz the class call the method on (this parameter is required because this method cannot call inherit method)
+     * @param thiz this object, which can be {@code null} if the target method is static
+     * @param methodName the method name
+     * @param args arguments to call the method with name {@code methodName}
+     * @return the return value of the method
+     */
+    public static Object invoke(Class<?> clazz, Object thiz, String methodName, Object... args) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        if (thiz != null && !clazz.isInstance(thiz)) {
+            throw new IllegalArgumentException("this object is not an instance of the given class");
+        }
+        Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
+        long methods = unsafe.getLong(clazz, methodsOffset);
+        int numMethods = unsafe.getInt(methods);
+        Log.d(TAG, clazz + " has " + numMethods + " methods");
+        checkMethod:
+        for (int i = 0; i < numMethods; i++) {
+            long method = methods + i * size + bias;
+            unsafe.putLong(stub, methodOffset, method);
+            Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName());
+            if (methodName.equals(stub.getName())) {
+                Class<?>[] params = stub.getParameterTypes();
+                if (params.length != args.length) continue;
+                for (int j = 0; j < params.length; ++j) {
+                    if (!params[j].isInstance(args[j])) continue checkMethod;
+                }
+                return stub.invoke(thiz, args);
+            }
+        }
+        throw new NoSuchMethodException("Cannot find matching method");
     }
 
     /**
@@ -122,20 +189,14 @@ public final class HiddenApiBypass {
      * @return whether the operation is successful
      */
     public static boolean setHiddenApiExemptions(String... signaturePrefixes) {
-        List<Executable> methods = getDeclaredMethods(VMRuntime.class);
-        Optional<Executable> getRuntime = methods.stream().filter(it -> it.getName().equals("getRuntime")).findFirst();
-        Optional<Executable> setHiddenApiExemptions = methods.stream().filter(it -> it.getName().equals("setHiddenApiExemptions")).findFirst();
-        if (getRuntime.isPresent() && setHiddenApiExemptions.isPresent()) {
-            getRuntime.get().setAccessible(true);
-            try {
-                Object runtime = ((Method) getRuntime.get()).invoke(null);
-                setHiddenApiExemptions.get().setAccessible(true);
-                ((Method) setHiddenApiExemptions.get()).invoke(runtime, (Object) signaturePrefixes);
-                return true;
-            } catch (IllegalAccessException | InvocationTargetException ignored) {
-            }
+        try {
+            Object runtime = invoke(VMRuntime.class, null, "getRuntime");
+            invoke(VMRuntime.class, runtime, "setHiddenApiExemptions", (Object) signaturePrefixes);
+            return true;
+        } catch (Throwable e) {
+            Log.e(TAG, "invoke", e);
+            return false;
         }
-        return false;
     }
 
     /**
