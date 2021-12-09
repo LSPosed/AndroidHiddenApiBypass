@@ -21,18 +21,37 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:2.0'
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:3.0'
 }
 ```
 
 ## Usage
 
-```java
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+1. Invoke a restricted method:
+    ```java
+    HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "usesNonSdkApi"/*, args*/)
+    ```
+1. Invoke restricted constructor:
+    ```java
+    Object instance = HiddenApiBypass.newInstance(Class.forName("android.app.IActivityManager$Default")/*, args*/);
+    ```
+1. Get all methods including restrcted ones from a class:
+    ```java
+    var allMethods = HiddenApiBypass.getDeclaredMethods(ApplicationInfo.class);
+    ((Method).stream(allMethods).filter(e -> e.getName().equals("usesNonSdkApi")).findFirst().get()).invoke(new ApplicationInfo());
+    ```
+1. Add a class to exemption list:
+    ```java
+    HiddenApiBypass.addHiddenApiExemptions(
+        "Landroid/content/pm/ApplicationInfo;", // one specific class
+        "Ldalvik/system" // all classes in packages dalvik.system
+        "Lx" // all classes whose full name is started with x
+    );
+    ```
+    if you are going to add all classes to exemption list, just leave an empty prefix:
+    ```java
     HiddenApiBypass.addHiddenApiExemptions("");
-}
-```
-
+    ```
 ## License
 
     Copyright 2021 LSPosed
