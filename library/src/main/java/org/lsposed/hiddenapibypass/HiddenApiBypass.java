@@ -94,6 +94,7 @@ public final class HiddenApiBypass {
     public static Object newInstance(Class<?> clazz, Object... initargs) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
         Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
         Constructor<?> ctor = Helper.InvokeStub.class.getDeclaredConstructor(Object[].class);
+        ctor.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
         checkMethod:
