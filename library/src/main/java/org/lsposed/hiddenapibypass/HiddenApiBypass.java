@@ -85,11 +85,10 @@ public final class HiddenApiBypass {
     /**
      * create an instance of the given class {@code clazz} calling the restricted constructor with arguments {@code args}
      *
-     * @see Constructor#newInstance(Object...)
-     *
-     * @param clazz the class of the instance to new
+     * @param clazz    the class of the instance to new
      * @param initargs arguments to call constructor
      * @return the new instance
+     * @see Constructor#newInstance(Object...)
      */
     public static Object newInstance(Class<?> clazz, Object... initargs) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
         Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
@@ -97,10 +96,13 @@ public final class HiddenApiBypass {
         ctor.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
         checkMethod:
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
+            if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName() +
+                    "(" + Arrays.stream(stub.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if ("<init>".equals(stub.getName())) {
                 unsafe.putLong(ctor, methodOffset, method);
                 unsafe.putObject(ctor, classOffset, clazz);
@@ -118,13 +120,12 @@ public final class HiddenApiBypass {
     /**
      * invoke a restrict method named {@code methodName} of the given class {@code clazz} with this object {@code thiz} and arguments {@code args}
      *
-     * @see Method#invoke(Object, Object...)
-     *
-     * @param clazz the class call the method on (this parameter is required because this method cannot call inherit method)
-     * @param thiz this object, which can be {@code null} if the target method is static
+     * @param clazz      the class call the method on (this parameter is required because this method cannot call inherit method)
+     * @param thiz       this object, which can be {@code null} if the target method is static
      * @param methodName the method name
-     * @param args arguments to call the method with name {@code methodName}
+     * @param args       arguments to call the method with name {@code methodName}
      * @return the return value of the method
+     * @see Method#invoke(Object, Object...)
      */
     public static Object invoke(Class<?> clazz, Object thiz, String methodName, Object... args) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         if (thiz != null && !clazz.isInstance(thiz)) {
@@ -134,12 +135,13 @@ public final class HiddenApiBypass {
         stub.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
-        Log.d(TAG, clazz + " has " + numMethods + " methods");
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
         checkMethod:
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
-            Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName());
+            if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName() +
+                    "(" + Arrays.stream(stub.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if (methodName.equals(stub.getName())) {
                 Class<?>[] params = stub.getParameterTypes();
                 if (params.length != args.length) continue;
@@ -180,8 +182,9 @@ public final class HiddenApiBypass {
             }
             MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
             Executable member = (Executable) unsafe.getObject(info, memberOffset);
-            if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + member +
-                    "(" + Arrays.stream(member.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
+            if (BuildConfig.DEBUG)
+                Log.v(TAG, "got " + clazz.getTypeName() + "." + member.getName() +
+                        "(" + Arrays.stream(member.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             list.add(member);
         }
         return list;
@@ -201,7 +204,7 @@ public final class HiddenApiBypass {
             invoke(VMRuntime.class, runtime, "setHiddenApiExemptions", (Object) signaturePrefixes);
             return true;
         } catch (Throwable e) {
-            Log.w(TAG, "invoke", e);
+            Log.w(TAG, "setHiddenApiExemptions", e);
             return false;
         }
     }
