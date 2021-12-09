@@ -46,6 +46,7 @@ public final class HiddenApiBypass {
     private static final String TAG = "HiddenApiBypass";
     private static final Unsafe unsafe;
     private static final long methodOffset;
+    private static final long classOffset;
     private static final long artOffset;
     private static final long infoOffset;
     private static final long methodsOffset;
@@ -60,6 +61,7 @@ public final class HiddenApiBypass {
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
             assert unsafe != null;
             methodOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("artMethod"));
+            classOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("declaringClass"));
             artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
             infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
             methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
@@ -100,6 +102,7 @@ public final class HiddenApiBypass {
             unsafe.putLong(stub, methodOffset, method);
             if ("<init>".equals(stub.getName())) {
                 unsafe.putLong(ctor, methodOffset, method);
+                unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
                 if (params.length != initargs.length) continue;
                 for (int j = 0; j < params.length; ++j) {
@@ -127,6 +130,7 @@ public final class HiddenApiBypass {
             throw new IllegalArgumentException("this object is not an instance of the given class");
         }
         Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
+        stub.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
         Log.d(TAG, clazz + " has " + numMethods + " methods");

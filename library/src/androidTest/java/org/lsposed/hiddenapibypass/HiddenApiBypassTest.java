@@ -1,6 +1,8 @@
 package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.pm.ApplicationInfo;
@@ -17,6 +19,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
 
 import java.lang.reflect.Executable;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,26 +43,41 @@ public class HiddenApiBypassTest {
         assertTrue(setHiddenApiExemptions.isPresent());
     }
 
-    @Test
+    @Test(expected = NoSuchMethodException.class)
     public void BusesNonSdkApiIsHiddenApi() throws NoSuchMethodException {
-        exception.expect(NoSuchMethodException.class);
         ApplicationInfo.class.getMethod("usesNonSdkApi");
     }
 
-    @Test
+    @Test(expected = NoSuchMethodException.class)
     public void CsetHiddenApiExemptionsIsHiddenApi() throws NoSuchMethodException {
-        exception.expect(NoSuchMethodException.class);
         VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
     }
 
+    @Test(expected = NoSuchMethodException.class)
+    public void DnewIActivityManagerDefault() throws NoSuchMethodException, ClassNotFoundException {
+        Class.forName("android.app.IActivityManager$Default").getDeclaredConstructor();
+    }
+
     @Test
-    public void DsetHiddenApiExemptions() throws NoSuchMethodException {
+    public void EinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "usesNonSdkApi");
+    }
+
+    @Test
+    public void FnewIActivityManagerStubWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, ClassNotFoundException, InstantiationException {
+        Class<?> stub = Class.forName("android.app.IActivityManager$Default");
+        Object instance = HiddenApiBypass.newInstance(stub);
+        assertSame(instance.getClass(), stub);
+    }
+
+    @Test
+    public void GsetHiddenApiExemptions() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("usesNonSdkApi");
     }
 
     @Test
-    public void EclearHiddenApiExemptions() throws NoSuchMethodException {
+    public void HclearHiddenApiExemptions() throws NoSuchMethodException {
         exception.expect(NoSuchMethodException.class);
         exception.expectMessage(containsString("setHiddenApiExemptions"));
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
@@ -69,7 +87,7 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void FaddHiddenApiExemptionsTest() throws NoSuchMethodException {
+    public void IaddHiddenApiExemptionsTest() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("usesNonSdkApi");
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system/VMRuntime;"));
