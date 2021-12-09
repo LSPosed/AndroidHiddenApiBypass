@@ -1,7 +1,6 @@
 package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -71,13 +70,18 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void GsetHiddenApiExemptions() throws NoSuchMethodException {
+    public void GgetAllMethodsWithoutExemption() {
+        assertTrue(HiddenApiBypass.getDeclaredMethods(ApplicationInfo.class).stream().anyMatch(e -> e.getName().equals("usesNonSdkApi")));
+    }
+
+    @Test
+    public void HsetHiddenApiExemptions() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("usesNonSdkApi");
     }
 
     @Test
-    public void HclearHiddenApiExemptions() throws NoSuchMethodException {
+    public void IclearHiddenApiExemptions() throws NoSuchMethodException {
         exception.expect(NoSuchMethodException.class);
         exception.expectMessage(containsString("setHiddenApiExemptions"));
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
@@ -87,7 +91,7 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void IaddHiddenApiExemptionsTest() throws NoSuchMethodException {
+    public void JaddHiddenApiExemptionsTest() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("usesNonSdkApi");
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system/VMRuntime;"));
