@@ -1,6 +1,7 @@
 package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -93,5 +94,20 @@ public class HiddenApiBypassTest {
         ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system/VMRuntime;"));
         VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
+    }
+
+    @Test
+    public void KtestCheckArgsForInvokeMethod() {
+        class X {
+        }
+        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{}, new Object[]{new Object()}));
+        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{1}));
+        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{1.0}));
+        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{null}));
+        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Integer.class}, new Object[]{1}));
+        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Integer.class}, new Object[]{null}));
+        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class}, new Object[]{new X()}));
+        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{X.class}, new Object[]{new Object()}));
+        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class, int.class, byte.class, short.class, char.class, double.class, float.class, boolean.class, long.class}, new Object[]{new X(), 1, (byte) 0, (short) 2, 'c', 1.1, 1.2f, false, 114514L}));
     }
 }

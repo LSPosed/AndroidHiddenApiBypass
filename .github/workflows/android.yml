@@ -18,6 +18,13 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: '11'
+    - name: Gradle cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/buildSrc/**/*.kt') }}
     - name: Build with Gradle
       run: ./gradlew publishToMavenLocal
       env:
@@ -30,6 +37,7 @@ jobs:
         path: ~/.m2
 
   test:
+    needs: build
     runs-on: macos-latest
     strategy:
       matrix:
@@ -41,6 +49,32 @@ jobs:
         uses: actions/setup-java@v1
         with:
           java-version: '11'
+      - name: Gradle cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/buildSrc/**/*.kt') }}
+      - name: AVD cache
+        uses: actions/cache@v2
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}
+      - name: create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          script: echo "Generated AVD snapshot for caching."
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
       - name: run tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -48,3 +82,6 @@ jobs:
           arch: x86_64
           target: google_apis
           script: ./gradlew connectedCheck
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true

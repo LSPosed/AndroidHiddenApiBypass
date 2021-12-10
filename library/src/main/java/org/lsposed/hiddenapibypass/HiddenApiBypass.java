@@ -20,6 +20,7 @@ import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
+import androidx.annotation.VisibleForTesting;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
@@ -82,7 +83,8 @@ public final class HiddenApiBypass {
         }
     }
 
-    private static boolean checkArgsForInvokeMethod(Class<?>[] params, Object[] args) {
+    @VisibleForTesting
+    static boolean checkArgsForInvokeMethod(Class<?>[] params, Object[] args) {
         if (params.length != args.length) return false;
         for (int i = 0; i < params.length; ++i) {
             if (params[i].isPrimitive()) {
