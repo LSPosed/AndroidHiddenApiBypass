@@ -1,5 +1,6 @@
 package sun.misc;
 
+@SuppressWarnings({"unused", "rawtypes"})
 public class Unsafe {
     public native long getLong(Object obj, long offset);
     public native void putLong(Object obj, long offset, long newValue);

@@ -7,8 +7,10 @@ import static org.junit.Assert.assertTrue;
 
 import android.content.pm.ApplicationInfo;
 import android.graphics.drawable.ClipDrawable;
+import android.os.Build;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.filters.SdkSuppress;
 
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -26,6 +28,7 @@ import dalvik.system.VMRuntime;
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@SdkSuppress(minSdkVersion = Build.VERSION_CODES.P)
 @RunWith(AndroidJUnit4.class)
 public class HiddenApiBypassTest {
 
