@@ -20,6 +20,7 @@ import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Member;
 
+@SuppressWarnings("unused")
 public class Helper {
     static public class MethodHandle {
         private final MethodType type = null;
@@ -81,6 +82,7 @@ public class Helper {
         private int accessFlags;
     }
 
+    @SuppressWarnings("EmptyMethod")
     public static class NeverCall {
         static void a() {
         }

@@ -7,12 +7,12 @@ plugins {
 }
 
 android {
-    compileSdk 31
-    buildToolsVersion "31.0.0"
+    compileSdk 32
+    buildToolsVersion "32.0.0"
 
     defaultConfig {
         minSdk 1
-        targetSdk 31
+        targetSdk 32
         versionCode 4
         versionName "3.0"
         consumerProguardFiles "consumer-rules.pro"
@@ -43,6 +43,11 @@ android {
 
     testOptions {
         devices {
+            api32(ManagedVirtualDevice) {
+                device = "Pixel 2"
+                apiLevel = 32
+                abi = "x86_64"
+            }
             api31(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 31
