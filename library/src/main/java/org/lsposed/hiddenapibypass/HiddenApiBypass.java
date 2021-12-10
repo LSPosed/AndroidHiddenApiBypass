@@ -188,7 +188,7 @@ public final class HiddenApiBypass {
             Executable member = (Executable) unsafe.getObject(info, memberOffset);
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + clazz.getTypeName() + "." + member.getName() +
-                        "(" + Arrays.stream(member.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
+                        "(" + Arrays.stream(member.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             list.add(member);
         }
         return list;
