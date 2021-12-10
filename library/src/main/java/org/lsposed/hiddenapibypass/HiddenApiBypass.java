@@ -123,8 +123,8 @@ public final class HiddenApiBypass {
                 unsafe.putLong(ctor, methodOffset, method);
                 unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
-                if (!checkArgsForInvokeMethod(params, initargs)) continue;
-                return ctor.newInstance(initargs);
+                if (checkArgsForInvokeMethod(params, initargs))
+                    return ctor.newInstance(initargs);
             }
         }
         throw new NoSuchMethodException("Cannot find matching method");
@@ -156,8 +156,8 @@ public final class HiddenApiBypass {
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if (methodName.equals(stub.getName())) {
                 Class<?>[] params = stub.getParameterTypes();
-                if (!checkArgsForInvokeMethod(params, args)) continue;
-                return stub.invoke(thiz, args);
+                if (checkArgsForInvokeMethod(params, args))
+                    return stub.invoke(thiz, args);
             }
         }
         throw new NoSuchMethodException("Cannot find matching method");
