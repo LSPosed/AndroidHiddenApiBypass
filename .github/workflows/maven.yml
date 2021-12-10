@@ -15,7 +15,11 @@ jobs:
       with:
         java-version: '11'
     - name: Build with Gradle
-      run: ./gradlew publish
+      run: |
+        sed -i '/withSourcesJar()/d' library/build.gradle
+        ./gradlew publishToMavenLocal
+        git reset --hard HEAD
+        ./gradlew publish
       env:
         ORG_GRADLE_PROJECT_signingKey: ${{ secrets.signingKey }}
         ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.signingPassword }}
