@@ -102,14 +102,16 @@ public final class HiddenApiBypass {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
             if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName() +
-                    "(" + Arrays.stream(stub.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
+                    "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if ("<init>".equals(stub.getName())) {
                 unsafe.putLong(ctor, methodOffset, method);
                 unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
                 if (params.length != initargs.length) continue;
                 for (int j = 0; j < params.length; ++j) {
-                    if (!params[j].isInstance(initargs[j])) continue checkMethod;
+                    if ((initargs[j] == null && params[j].isPrimitive()) ||
+                            (initargs[j] != null && !params[j].isInstance(initargs[j])))
+                        continue checkMethod;
                 }
                 return ctor.newInstance(initargs);
             }
@@ -141,12 +143,14 @@ public final class HiddenApiBypass {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
             if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName() +
-                    "(" + Arrays.stream(stub.getTypeParameters()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
+                    "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if (methodName.equals(stub.getName())) {
                 Class<?>[] params = stub.getParameterTypes();
                 if (params.length != args.length) continue;
                 for (int j = 0; j < params.length; ++j) {
-                    if (!params[j].isInstance(args[j])) continue checkMethod;
+                    if ((args[j] == null && params[j].isPrimitive()) ||
+                            (args[j] != null && !params[j].isInstance(args[j])))
+                        continue checkMethod;
                 }
                 return stub.invoke(thiz, args);
             }

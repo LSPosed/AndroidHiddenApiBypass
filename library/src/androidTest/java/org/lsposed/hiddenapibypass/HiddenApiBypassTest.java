@@ -5,11 +5,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.pm.ApplicationInfo;
-import android.content.pm.ModuleInfo;
-import android.os.Build;
+import android.graphics.drawable.ClipDrawable;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.filters.SdkSuppress;
 
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -27,7 +25,6 @@ import dalvik.system.VMRuntime;
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@SdkSuppress(minSdkVersion = Build.VERSION_CODES.Q)
 @RunWith(AndroidJUnit4.class)
 public class HiddenApiBypassTest {
 
@@ -45,7 +42,7 @@ public class HiddenApiBypassTest {
 
     @Test(expected = NoSuchMethodException.class)
     public void BusesNonSdkApiIsHiddenApi() throws NoSuchMethodException {
-        ApplicationInfo.class.getMethod("usesNonSdkApi");
+        ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
     }
 
     @Test(expected = NoSuchMethodException.class)
@@ -54,30 +51,30 @@ public class HiddenApiBypassTest {
     }
 
     @Test(expected = NoSuchMethodException.class)
-    public void DnewModuleInfo() throws NoSuchMethodException {
-        ModuleInfo.class.getDeclaredConstructor();
+    public void DnewClipDrawable() throws NoSuchMethodException {
+        ClipDrawable.class.getDeclaredConstructor();
     }
 
     @Test
     public void EinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "usesNonSdkApi");
+        HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "getHiddenApiEnforcementPolicy");
     }
 
     @Test
-    public void FnewModuleInfoWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
-        Object instance = HiddenApiBypass.newInstance(ModuleInfo.class);
-        assertSame(instance.getClass(), ModuleInfo.class);
+    public void FnewClipDrawableWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
+        Object instance = HiddenApiBypass.newInstance(ClipDrawable.class);
+        assertSame(instance.getClass(), ClipDrawable.class);
     }
 
     @Test
     public void GgetAllMethodsWithoutExemption() {
-        assertTrue(HiddenApiBypass.getDeclaredMethods(ApplicationInfo.class).stream().anyMatch(e -> e.getName().equals("usesNonSdkApi")));
+        assertTrue(HiddenApiBypass.getDeclaredMethods(ApplicationInfo.class).stream().anyMatch(e -> e.getName().equals("getHiddenApiEnforcementPolicy")));
     }
 
     @Test
     public void HsetHiddenApiExemptions() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
-        ApplicationInfo.class.getMethod("usesNonSdkApi");
+        ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
     }
 
     @Test
@@ -85,7 +82,7 @@ public class HiddenApiBypassTest {
         exception.expect(NoSuchMethodException.class);
         exception.expectMessage(containsString("setHiddenApiExemptions"));
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
-        ApplicationInfo.class.getMethod("usesNonSdkApi");
+        ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
         assertTrue(HiddenApiBypass.clearHiddenApiExemptions());
         VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
     }
@@ -93,7 +90,7 @@ public class HiddenApiBypassTest {
     @Test
     public void JaddHiddenApiExemptionsTest() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
-        ApplicationInfo.class.getMethod("usesNonSdkApi");
+        ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system/VMRuntime;"));
         VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
     }
