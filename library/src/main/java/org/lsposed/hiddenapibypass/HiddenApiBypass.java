@@ -82,6 +82,23 @@ public final class HiddenApiBypass {
         }
     }
 
+    private static boolean checkArgsForInvokeMethod(Class<?>[] params, Object[] args) {
+        if (params.length != args.length) return false;
+        for (int i = 0; i < params.length; ++i) {
+            if (params[i].isPrimitive()) {
+                if (params[i] == int.class && !(args[i] instanceof Integer)) return false;
+                else if (params[i] == byte.class && !(args[i] instanceof Byte)) return false;
+                else if (params[i] == char.class && !(args[i] instanceof Character)) return false;
+                else if (params[i] == boolean.class && !(args[i] instanceof Boolean)) return false;
+                else if (params[i] == double.class && !(args[i] instanceof Double)) return false;
+                else if (params[i] == float.class && !(args[i] instanceof Float)) return false;
+                else if (params[i] == long.class && !(args[i] instanceof Long)) return false;
+                else if (params[i] == short.class && !(args[i] instanceof Short)) return false;
+            } else if (args[i] != null && !params[i].isInstance(args[i])) return false;
+        }
+        return true;
+    }
+
     /**
      * create an instance of the given class {@code clazz} calling the restricted constructor with arguments {@code args}
      *
@@ -97,7 +114,6 @@ public final class HiddenApiBypass {
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
-        checkMethod:
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
@@ -107,12 +123,7 @@ public final class HiddenApiBypass {
                 unsafe.putLong(ctor, methodOffset, method);
                 unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
-                if (params.length != initargs.length) continue;
-                for (int j = 0; j < params.length; ++j) {
-                    if ((initargs[j] == null && params[j].isPrimitive()) ||
-                            (initargs[j] != null && !params[j].isInstance(initargs[j])))
-                        continue checkMethod;
-                }
+                if (!checkArgsForInvokeMethod(params, initargs)) continue;
                 return ctor.newInstance(initargs);
             }
         }
@@ -138,7 +149,6 @@ public final class HiddenApiBypass {
         long methods = unsafe.getLong(clazz, methodsOffset);
         int numMethods = unsafe.getInt(methods);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
-        checkMethod:
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * size + bias;
             unsafe.putLong(stub, methodOffset, method);
@@ -146,12 +156,7 @@ public final class HiddenApiBypass {
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if (methodName.equals(stub.getName())) {
                 Class<?>[] params = stub.getParameterTypes();
-                if (params.length != args.length) continue;
-                for (int j = 0; j < params.length; ++j) {
-                    if ((args[j] == null && params[j].isPrimitive()) ||
-                            (args[j] != null && !params[j].isInstance(args[j])))
-                        continue checkMethod;
-                }
+                if (!checkArgsForInvokeMethod(params, args)) continue;
                 return stub.invoke(thiz, args);
             }
         }
