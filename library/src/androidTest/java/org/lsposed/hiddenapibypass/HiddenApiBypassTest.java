@@ -1,8 +1,8 @@
 package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -81,11 +81,13 @@ public class HiddenApiBypassTest {
 
     @Test
     public void IinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        assertNotEquals(HiddenApiBypass.getDeclaredMethod(ApplicationInfo.class, "getHiddenApiEnforcementPolicy"), null);
         HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "getHiddenApiEnforcementPolicy");
     }
 
     @Test
     public void JnewClipDrawableWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
+        assertNotEquals(HiddenApiBypass.getDeclaredConstructor(ClipDrawable.class), null);
         Object instance = HiddenApiBypass.newInstance(ClipDrawable.class);
         assertSame(instance.getClass(), ClipDrawable.class);
     }
