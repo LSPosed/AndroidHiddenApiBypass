@@ -27,11 +27,6 @@ import java.util.Optional;
 
 import dalvik.system.VMRuntime;
 
-
-class S {
-    static int x = 114514;
-}
-
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.P)
