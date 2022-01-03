@@ -1,6 +1,7 @@
 package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -25,6 +26,11 @@ import java.util.List;
 import java.util.Optional;
 
 import dalvik.system.VMRuntime;
+
+
+class S {
+    static int x = 114514;
+}
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -112,5 +118,19 @@ public class HiddenApiBypassTest {
         assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class}, new Object[]{new X()}));
         assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{X.class}, new Object[]{new Object()}));
         assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class, int.class, byte.class, short.class, char.class, double.class, float.class, boolean.class, long.class}, new Object[]{new X(), 1, (byte) 0, (short) 2, 'c', 1.1, 1.2f, false, 114514L}));
+    }
+
+    @Test
+    public void LtestGetInstanceFields() throws IllegalAccessException {
+        class X {
+            final int x = 114514;
+        }
+        X x = new X();
+        assertEquals((int)HiddenApiBypass.getInstanceFields(X.class).get(1).getInt(x), 114514);
+    }
+
+    @Test
+    public void LtestGetStaticFields() throws IllegalAccessException {
+        assertEquals((int)HiddenApiBypass.getStaticFields(S.class).get(0).getInt(null), 114514);
     }
 }

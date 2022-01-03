@@ -89,6 +89,11 @@ public class Helper {
 
         static void b() {
         }
+
+        static int s;
+        static int t;
+        int i;
+        int j;
     }
 
     public static class InvokeStub {

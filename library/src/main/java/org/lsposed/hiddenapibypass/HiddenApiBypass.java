@@ -29,6 +29,7 @@ import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -51,9 +52,13 @@ public final class HiddenApiBypass {
     private static final long artOffset;
     private static final long infoOffset;
     private static final long methodsOffset;
+    private static final long iFieldOffset;
+    private static final long sFieldOffset;
     private static final long memberOffset;
-    private static final long size;
-    private static final long bias;
+    private static final long artMethodSize;
+    private static final long artMethodBias;
+    private static final long artFieldSize;
+    private static final long artFieldBias;
     private static final Set<String> signaturePrefixes = new HashSet<>();
 
     static {
@@ -66,18 +71,31 @@ public final class HiddenApiBypass {
             artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
             infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
             methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
+            iFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("iFields"));
+            sFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("sFields"));
             memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
             MethodHandle mhA = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
             MethodHandle mhB = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("b"));
             long aAddr = unsafe.getLong(mhA, artOffset);
             long bAddr = unsafe.getLong(mhB, artOffset);
             long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
-            size = bAddr - aAddr;
-            if (BuildConfig.DEBUG) Log.v(TAG, size + " " +
+            artMethodSize = bAddr - aAddr;
+            if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
                     Long.toString(aAddr, 16) + ", " +
                     Long.toString(bAddr, 16) + ", " +
                     Long.toString(aMethods, 16));
-            bias = aAddr - aMethods - size;
+            artMethodBias = aAddr - aMethods - artMethodSize;
+            MethodHandle mhI = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("i"));
+            MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("j"));
+            long iAddr = unsafe.getLong(mhI, artOffset);
+            long jAddr = unsafe.getLong(mhJ, artOffset);
+            long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
+            artFieldSize = jAddr - iAddr;
+            if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
+                    Long.toString(iAddr, 16) + ", " +
+                    Long.toString(jAddr, 16) + ", " +
+                    Long.toString(iFields, 16));
+            artFieldBias = iAddr - iFields;
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -114,10 +132,11 @@ public final class HiddenApiBypass {
         Constructor<?> ctor = Helper.InvokeStub.class.getDeclaredConstructor(Object[].class);
         ctor.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
+        if (methods == 0) throw new NoSuchMethodException("Cannot find matching method");
         int numMethods = unsafe.getInt(methods);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
         for (int i = 0; i < numMethods; i++) {
-            long method = methods + i * size + bias;
+            long method = methods + i * artMethodSize + artMethodBias;
             unsafe.putLong(stub, methodOffset, method);
             if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName() +
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
@@ -149,10 +168,11 @@ public final class HiddenApiBypass {
         Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
         stub.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
+        if (methods == 0) throw new NoSuchMethodException("Cannot find matching method");
         int numMethods = unsafe.getInt(methods);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
         for (int i = 0; i < numMethods; i++) {
-            long method = methods + i * size + bias;
+            long method = methods + i * artMethodSize + artMethodBias;
             unsafe.putLong(stub, methodOffset, method);
             if (BuildConfig.DEBUG) Log.v(TAG, "got " + clazz.getTypeName() + "." + stub.getName() +
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
@@ -181,10 +201,11 @@ public final class HiddenApiBypass {
             return list;
         }
         long methods = unsafe.getLong(clazz, methodsOffset);
+        if (methods == 0) return list;
         int numMethods = unsafe.getInt(methods);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
         for (int i = 0; i < numMethods; i++) {
-            long method = methods + i * size + bias;
+            long method = methods + i * artMethodSize + artMethodBias;
             unsafe.putLong(mh, artOffset, method);
             unsafe.putObject(mh, infoOffset, null);
             try {
@@ -196,6 +217,80 @@ public final class HiddenApiBypass {
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + clazz.getTypeName() + "." + member.getName() +
                         "(" + Arrays.stream(member.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
+            list.add(member);
+        }
+        return list;
+    }
+
+    /**
+     * get declared non-static fields of given class without hidden api restriction
+     *
+     * @param clazz the class to fetch declared methods
+     * @return list of declared non-static fields of {@code clazz}
+     */
+    public static List<Field> getInstanceFields(Class<?> clazz) {
+        ArrayList<Field> list = new ArrayList<>();
+        if (clazz.isPrimitive() || clazz.isArray()) return list;
+        MethodHandle mh;
+        try {
+            mh = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("i"));
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            return list;
+        }
+        long fields = unsafe.getLong(clazz, iFieldOffset);
+        if (fields == 0) return list;
+        int numFields = unsafe.getInt(fields);
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " instance fields");
+        for (int i = 0; i < numFields; i++) {
+            long field = fields + i * artFieldSize + artFieldBias;
+            unsafe.putLong(mh, artOffset, field);
+            unsafe.putObject(mh, infoOffset, null);
+            try {
+                MethodHandles.lookup().revealDirect(mh);
+            } catch (Throwable ignored) {
+            }
+            MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
+            Field member = (Field) unsafe.getObject(info, memberOffset);
+            if (BuildConfig.DEBUG)
+                Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
+            list.add(member);
+        }
+        return list;
+    }
+
+    /**
+     * get declared static fields of given class without hidden api restriction
+     *
+     * @param clazz the class to fetch declared methods
+     * @return list of declared static fields of {@code clazz}
+     */
+    public static List<Field> getStaticFields(Class<?> clazz) {
+        ArrayList<Field> list = new ArrayList<>();
+        if (clazz.isPrimitive() || clazz.isArray()) return list;
+        MethodHandle mh;
+        try {
+            mh = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("s"));
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            return list;
+        }
+        long fields = unsafe.getLong(clazz, sFieldOffset);
+        if (fields == 0) return list;
+        Log.d(TAG, "sfield: " + fields);
+        int numFields = unsafe.getInt(fields);
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " static fields");
+        for (int i = 0; i < numFields; i++) {
+            long field = fields + i * artFieldSize + artFieldBias;
+            Log.d(TAG, "field " + Long.toString(field, 16));
+            unsafe.putLong(mh, artOffset, field);
+            unsafe.putObject(mh, infoOffset, null);
+            try {
+                MethodHandles.lookup().revealDirect(mh);
+            } catch (Throwable ignored) {
+            }
+            MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
+            Field member = (Field) unsafe.getObject(info, memberOffset);
+            if (BuildConfig.DEBUG)
+                Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
             list.add(member);
         }
         return list;
