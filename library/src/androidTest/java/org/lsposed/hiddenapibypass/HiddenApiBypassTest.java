@@ -61,34 +61,55 @@ public class HiddenApiBypassTest {
     }
 
     @Test(expected = NoSuchMethodException.class)
-    public void DnewClipDrawable() throws NoSuchMethodException {
+    public void DnewClipDrawableIsHiddenApi() throws NoSuchMethodException {
         ClipDrawable.class.getDeclaredConstructor();
     }
 
+    @Test(expected = NoSuchFieldException.class)
+    public void ElongVersionCodeIsHiddenApi() throws NoSuchFieldException {
+        ApplicationInfo.class.getDeclaredField("longVersionCode");
+    }
+
+    @Test(expected = NoSuchFieldException.class)
+    public void FHiddenApiEnforcementDefaultIsHiddenApi() throws NoSuchFieldException {
+        ApplicationInfo.class.getDeclaredField("HIDDEN_API_ENFORCEMENT_DEFAULT");
+    }
     @Test
-    public void EinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    public void GtestGetInstanceFields() {
+        assertTrue(HiddenApiBypass.getInstanceFields(ApplicationInfo.class).stream().anyMatch(i -> i.getName().equals("longVersionCode")));
+    }
+
+    @Test
+    public void HtestGetStaticFields() {
+        assertTrue(HiddenApiBypass.getStaticFields(ApplicationInfo.class).stream().anyMatch(i -> i.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT")));
+    }
+
+    @Test
+    public void IinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "getHiddenApiEnforcementPolicy");
     }
 
     @Test
-    public void FnewClipDrawableWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
+    public void JnewClipDrawableWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
         Object instance = HiddenApiBypass.newInstance(ClipDrawable.class);
         assertSame(instance.getClass(), ClipDrawable.class);
     }
 
     @Test
-    public void GgetAllMethodsWithoutExemption() {
+    public void KgetAllMethodsWithoutExemption() {
         assertTrue(HiddenApiBypass.getDeclaredMethods(ApplicationInfo.class).stream().anyMatch(e -> e.getName().equals("getHiddenApiEnforcementPolicy")));
     }
 
     @Test
-    public void HsetHiddenApiExemptions() throws NoSuchMethodException {
+    public void LsetHiddenApiExemptions() throws NoSuchMethodException, NoSuchFieldException {
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
+        ApplicationInfo.class.getDeclaredField("longVersionCode");
+        ApplicationInfo.class.getDeclaredField("HIDDEN_API_ENFORCEMENT_DEFAULT");
     }
 
     @Test
-    public void IclearHiddenApiExemptions() throws NoSuchMethodException {
+    public void MclearHiddenApiExemptions() throws NoSuchMethodException {
         exception.expect(NoSuchMethodException.class);
         exception.expectMessage(containsString("setHiddenApiExemptions"));
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
@@ -98,7 +119,7 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void JaddHiddenApiExemptionsTest() throws NoSuchMethodException {
+    public void NaddHiddenApiExemptionsTest() throws NoSuchMethodException {
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system/VMRuntime;"));
@@ -106,7 +127,7 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void KtestCheckArgsForInvokeMethod() {
+    public void OtestCheckArgsForInvokeMethod() {
         class X {
         }
         assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{}, new Object[]{new Object()}));
@@ -120,17 +141,4 @@ public class HiddenApiBypassTest {
         assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class, int.class, byte.class, short.class, char.class, double.class, float.class, boolean.class, long.class}, new Object[]{new X(), 1, (byte) 0, (short) 2, 'c', 1.1, 1.2f, false, 114514L}));
     }
 
-    @Test
-    public void LtestGetInstanceFields() throws IllegalAccessException {
-        class X {
-            final int x = 114514;
-        }
-        X x = new X();
-        assertEquals((int)HiddenApiBypass.getInstanceFields(X.class).get(1).getInt(x), 114514);
-    }
-
-    @Test
-    public void LtestGetStaticFields() throws IllegalAccessException {
-        assertEquals((int)HiddenApiBypass.getStaticFields(S.class).get(0).getInt(null), 114514);
-    }
 }

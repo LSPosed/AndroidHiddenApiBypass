@@ -19,6 +19,7 @@ package org.lsposed.hiddenapibypass;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
@@ -191,6 +192,7 @@ public final class HiddenApiBypass {
      * @param clazz the class to fetch declared methods
      * @return list of declared methods of {@code clazz}
      */
+    @NonNull
     public static List<Executable> getDeclaredMethods(Class<?> clazz) {
         ArrayList<Executable> list = new ArrayList<>();
         if (clazz.isPrimitive() || clazz.isArray()) return list;
@@ -228,6 +230,7 @@ public final class HiddenApiBypass {
      * @param clazz the class to fetch declared methods
      * @return list of declared non-static fields of {@code clazz}
      */
+    @NonNull
     public static List<Field> getInstanceFields(Class<?> clazz) {
         ArrayList<Field> list = new ArrayList<>();
         if (clazz.isPrimitive() || clazz.isArray()) return list;
@@ -264,6 +267,7 @@ public final class HiddenApiBypass {
      * @param clazz the class to fetch declared methods
      * @return list of declared static fields of {@code clazz}
      */
+    @NonNull
     public static List<Field> getStaticFields(Class<?> clazz) {
         ArrayList<Field> list = new ArrayList<>();
         if (clazz.isPrimitive() || clazz.isArray()) return list;
