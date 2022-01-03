@@ -14,7 +14,7 @@ android {
         minSdk 1
         targetSdk 32
         versionCode 5
-        versionName "4.0"
+        versionName "4.1"
         consumerProguardFiles "consumer-rules.pro"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
