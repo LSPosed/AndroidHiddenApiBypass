@@ -233,7 +233,7 @@ public final class HiddenApiBypass {
      * @param parameterTypes argument types of the expected method with name {@code methodName}
      * @return the found method
      * @throws NoSuchMethodException when no method matches the given parameters
-     * @see Method#invoke(Object, Object...)
+     * @see Class#getDeclaredMethod(String, Class[]) 
      */
     @NonNull
     public static Method getDeclaredMethod(@NonNull Class<?> clazz, @NonNull String methodName, @NonNull Class<?>... parameterTypes) throws NoSuchMethodException {
@@ -259,7 +259,7 @@ public final class HiddenApiBypass {
      * @param parameterTypes argument types of the expected constructor
      * @return the found constructor
      * @throws NoSuchMethodException when no constructor matches the given parameters
-     * @see Method#invoke(Object, Object...)
+     * @see Class#getDeclaredConstructor(Class[])
      */
     @NonNull
     public static Constructor<?> getDeclaredConstructor(@NonNull Class<?> clazz, @NonNull Class<?>... parameterTypes) throws NoSuchMethodException {

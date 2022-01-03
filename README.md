@@ -50,7 +50,12 @@ dependencies {
     var allStaticFields = HiddenApiBypass.getStaticFields(ApplicationInfo.class);
     ((Method).stream(allInstanceFields).filter(e -> e.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT")).findFirst().get()).get(null);
     ```
-3. Add a class to exemption list:
+1. Get specific class method or class constructor
+    ```java
+    var ctor = HiddenApiBypass.getDeclaredConstructor(ClipDrawable.class /*, args */);
+    var method = HiddenApiBypass.getDeclaredMethod(ApplicationInfo.class, "getHiddenApiEnforcementPolicy" /*, args */);
+    ```
+1. Add a class to exemption list:
     ```java
     HiddenApiBypass.addHiddenApiExemptions(
         "Landroid/content/pm/ApplicationInfo;", // one specific class
