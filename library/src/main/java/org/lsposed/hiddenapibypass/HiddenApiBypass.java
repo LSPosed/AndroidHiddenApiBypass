@@ -333,12 +333,10 @@ public final class HiddenApiBypass {
         }
         long fields = unsafe.getLong(clazz, sFieldOffset);
         if (fields == 0) return list;
-        Log.d(TAG, "sfield: " + fields);
         int numFields = unsafe.getInt(fields);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " static fields");
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
-            Log.d(TAG, "field " + Long.toString(field, 16));
             unsafe.putLong(mh, artOffset, field);
             unsafe.putObject(mh, infoOffset, null);
             try {
