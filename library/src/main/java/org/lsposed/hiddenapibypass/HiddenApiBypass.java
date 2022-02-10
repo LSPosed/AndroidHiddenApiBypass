@@ -76,8 +76,12 @@ public final class HiddenApiBypass {
             iFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("iFields"));
             sFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("sFields"));
             memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
-            MethodHandle mhA = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
-            MethodHandle mhB = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("b"));
+            Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
+            Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
+            mA.setAccessible(true);
+            mB.setAccessible(true);
+            MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
+            MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
             long aAddr = unsafe.getLong(mhA, artOffset);
             long bAddr = unsafe.getLong(mhB, artOffset);
             long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
@@ -87,8 +91,12 @@ public final class HiddenApiBypass {
                     Long.toString(bAddr, 16) + ", " +
                     Long.toString(aMethods, 16));
             artMethodBias = aAddr - aMethods - artMethodSize;
-            MethodHandle mhI = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("i"));
-            MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("j"));
+            Field fI = Helper.NeverCall.class.getDeclaredField("i");
+            Field fJ = Helper.NeverCall.class.getDeclaredField("j");
+            fI.setAccessible(true);
+            fJ.setAccessible(true);
+            MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
+            MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
             long iAddr = unsafe.getLong(mhI, artOffset);
             long jAddr = unsafe.getLong(mhJ, artOffset);
             long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
@@ -99,6 +107,7 @@ public final class HiddenApiBypass {
                     Long.toString(iFields, 16));
             artFieldBias = iAddr - iFields;
         } catch (ReflectiveOperationException e) {
+            Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
         }
     }
@@ -199,7 +208,9 @@ public final class HiddenApiBypass {
         if (clazz.isPrimitive() || clazz.isArray()) return list;
         MethodHandle mh;
         try {
-            mh = MethodHandles.lookup().unreflect(Helper.NeverCall.class.getDeclaredMethod("a"));
+            Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
+            mA.setAccessible(true);
+            mh = MethodHandles.lookup().unreflect(mA);
         } catch (NoSuchMethodException | IllegalAccessException e) {
             return list;
         }
@@ -290,7 +301,9 @@ public final class HiddenApiBypass {
         if (clazz.isPrimitive() || clazz.isArray()) return list;
         MethodHandle mh;
         try {
-            mh = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("i"));
+            Field fI = Helper.NeverCall.class.getDeclaredField("i");
+            fI.setAccessible(true);
+            mh = MethodHandles.lookup().unreflectGetter(fI);
         } catch (IllegalAccessException | NoSuchFieldException e) {
             return list;
         }
@@ -327,7 +340,9 @@ public final class HiddenApiBypass {
         if (clazz.isPrimitive() || clazz.isArray()) return list;
         MethodHandle mh;
         try {
-            mh = MethodHandles.lookup().unreflectGetter(Helper.NeverCall.class.getDeclaredField("s"));
+            Field fS = Helper.NeverCall.class.getDeclaredField("s");
+            fS.setAccessible(true);
+            mh = MethodHandles.lookup().unreflectGetter(fS);
         } catch (IllegalAccessException | NoSuchFieldException e) {
             return list;
         }

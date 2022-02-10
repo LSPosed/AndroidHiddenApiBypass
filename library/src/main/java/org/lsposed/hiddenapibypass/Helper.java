@@ -71,7 +71,7 @@ public class Helper {
     }
 
     static public class AccessibleObject {
-        boolean override;
+        private boolean override;
     }
 
     static final public class Executable extends AccessibleObject {
@@ -84,24 +84,24 @@ public class Helper {
 
     @SuppressWarnings("EmptyMethod")
     public static class NeverCall {
-        static void a() {
+        private static void a() {
         }
 
-        static void b() {
+        private static void b() {
         }
 
-        static int s;
-        static int t;
-        int i;
-        int j;
+        private static int s;
+        private static int t;
+        private int i;
+        private int j;
     }
 
     public static class InvokeStub {
-        static Object invoke(Object... args) {
+        private static Object invoke(Object... args) {
             throw new IllegalStateException("Failed to invoke the method");
         }
 
-        InvokeStub(Object... args) {
+        private InvokeStub(Object... args) {
             throw new IllegalStateException("Failed to new a instance");
         }
     }
