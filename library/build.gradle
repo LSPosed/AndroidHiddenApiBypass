@@ -112,6 +112,7 @@ publishing {
                 developers {
                     developer {
                         name = 'Lsposed'
+                        url = 'https://lsposed.org'
                     }
                 }
                 scm {
