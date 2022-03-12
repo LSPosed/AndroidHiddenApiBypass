@@ -128,6 +128,14 @@ publishing {
             url 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
             credentials PasswordCredentials
         }
+        maven {
+            name 'GitHubPackages'
+            url = 'https://maven.pkg.github.com/LSPosed/AndroidHiddenApiBypass'
+            credentials {
+                username System.getenv('GITHUB_ACTOR')
+                password System.getenv('GITHUB_TOKEN')
+            }
+        }
     }
 }
 
