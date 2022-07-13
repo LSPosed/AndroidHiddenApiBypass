@@ -41,7 +41,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        api-level: [28, 29, 30, 31, 32, Tiramisu]
+        api-level: [28, 29, 30, 31, 32, 33]
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -66,7 +66,7 @@ jobs:
           key: avd-${{ matrix.api-level }}
       - name: create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: yujincheng08/android-emulator-runner@release/v2
+        uses: reactivecircus/android-emulator-runner@release/v2
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
@@ -76,7 +76,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
       - name: run tests
-        uses: yujincheng08/android-emulator-runner@release/v2
+        uses: reactivecircus/android-emulator-runner@release/v2
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
