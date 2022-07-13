@@ -7,12 +7,12 @@ plugins {
 }
 
 android {
-    compileSdk 32
+    compileSdk 33
     buildToolsVersion "32.0.0"
 
     defaultConfig {
         minSdk 1
-        targetSdk 32
+        targetSdk 33
         versionCode 6
         versionName "4.3"
         consumerProguardFiles "consumer-rules.pro"
