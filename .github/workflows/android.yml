@@ -42,6 +42,7 @@ jobs:
     needs: build
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         api-level: [28, 29, 30, 31, 32, 33, UpsideDownCake-ext5]
         arch: [x86, x86_64]
