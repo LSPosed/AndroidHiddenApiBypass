@@ -43,7 +43,8 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        api-level: [28, 29, 30, 31, 32, 33]
+        api-level: [28, 29, 30, 31, 32, 33, UpsideDownCake-ext5]
+        arch: [x86, x86_64]
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -80,10 +81,10 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
       - name: run tests
-        uses: reactivecircus/android-emulator-runner@release/v2
+        uses: yujincheng08/android-emulator-runner@apilevel
         with:
           api-level: ${{ matrix.api-level }}
-          arch: x86_64
+          arch: ${{ matrix.arch }}
           target: google_apis
           script: ./gradlew connectedCheck
           force-avd-creation: false
