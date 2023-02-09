@@ -47,32 +47,32 @@ android {
             api33(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 33
-                abi = "x86_64"
+                require64Bit = true
             }
             api32(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 32
-                abi = "x86_64"
+                require64Bit = true
             }
             api31(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 31
-                abi = "x86_64"
+                require64Bit = true
             }
             api30(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 30
-                abi = "x86_64"
+                require64Bit = true
             }
             api29(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 29
-                abi = "x86_64"
+                require64Bit = true
             }
             api28(ManagedVirtualDevice) {
                 device = "Pixel 2"
                 apiLevel = 28
-                abi = "x86_64"
+                require64Bit = true
             }
         }
         deviceGroups {
