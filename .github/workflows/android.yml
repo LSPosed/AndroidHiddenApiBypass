@@ -20,13 +20,6 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
         cache: 'gradle'
-    - name: Gradle cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/buildSrc/**/*.kt') }}
     - name: Build with Gradle
       run: ./gradlew publishToMavenLocal
       env:
