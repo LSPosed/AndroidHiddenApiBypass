@@ -32,13 +32,49 @@ jobs:
         path: ~/.m2
 
   test:
+    name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
     needs: build
     runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
-        api-level: [28, 29, 30, 31, 32, 33, UpsideDownCake-ext5]
-        arch: [x86, x86_64]
+        include:
+          - api-level: 28
+            target: default
+            arch: x86_64
+          - api-level: 28
+            target: default
+            arch: x86
+          - api-level: 29
+            target: default
+            arch: x86_64
+          - api-level: 29
+            target: default
+            arch: x86
+          - api-level: 30
+            target: default
+            arch: x86_64
+          - api-level: 30
+            target: google_apis
+            arch: x86
+          - api-level: 31
+            target: default
+            arch: x86_64
+          - api-level: 31
+            target: android-tv
+            arch: x86
+          - api-level: 32
+            target: google_apis
+            arch: x86_64
+          - api-level: 33
+            target: google_apis
+            arch: x86_64
+          - api-level: 33
+            target: android-tv
+            arch: x86
+          - api-level: UpsideDownCake-ext5
+            target: google_apis
+            arch: x86_64
     steps:
       - name: checkout
         uses: actions/checkout@v3
@@ -53,7 +89,7 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           arch: ${{ matrix.arch }}
-          target: google_apis
+          target: ${{ matrix.target }}
           script: ./gradlew connectedCheck
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
