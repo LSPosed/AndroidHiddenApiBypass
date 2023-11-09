@@ -48,7 +48,7 @@ dependencies {
 1. Get all static fields including restricted ones from a class:
     ```java
     var allStaticFields = HiddenApiBypass.getStaticFields(ApplicationInfo.class);
-    ((Method).stream(allInstanceFields).filter(e -> e.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT")).findFirst().get()).get(null);
+    ((Method).stream(allStaticFields).filter(e -> e.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT")).findFirst().get()).get(null);
     ```
 1. Get specific class method or class constructor
     ```java
