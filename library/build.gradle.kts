@@ -21,6 +21,9 @@ android {
         minSdk = 1
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    testOptions {
+        targetSdk = 34
+    }
     buildTypes {
         release {
             consumerProguardFiles("consumer-rules.pro")
