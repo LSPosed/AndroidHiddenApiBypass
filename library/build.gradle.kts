@@ -17,7 +17,6 @@ android {
         androidResources = false
         buildConfig = true
     }
-
     defaultConfig {
         minSdk = 1
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

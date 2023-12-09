@@ -2,6 +2,10 @@
 <manifest xmlns:tools="http://schemas.android.com/tools">
 
     <uses-sdk tools:overrideLibrary="
+    android.support.test,
+    androidx.annotation.experimental
+    androidx.test.annotation,
+    androidx.tracing,
     androidx.test.ext.junit,
     androidx.test.rules,
     androidx.test.runner,
