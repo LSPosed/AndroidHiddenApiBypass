@@ -1,7 +1,7 @@
 [libraries]
 androidx-annotation = { module = "androidx.annotation:annotation", version="1.7.0" }
 test-ext-junit = { module = "androidx.test.ext:junit", version = "1.1.5" }
-test-rules = { module = "androidx.test:rules", version = "1.5.2" }
+test-rules = { module = "androidx.test:rules", version = "1.5.0" }
 
 [plugins]
 agp-lib = { id = "com.android.library", version = "8.2.0" }
