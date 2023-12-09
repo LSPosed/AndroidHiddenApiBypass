@@ -59,40 +59,43 @@ jobs:
             target: default
             arch: x86
           - api-level: 30
-            target: default
+            target: aosp_atd
             arch: x86_64
           - api-level: 30
             target: google_apis
             arch: x86
           - api-level: 31
-            target: default
+            target: aosp_atd
             arch: x86_64
           - api-level: 31
             target: android-tv
             arch: x86
           - api-level: 32
-            target: google_apis
+            target: aosp_atd
             arch: x86_64
           - api-level: 33
-            target: google_apis
+            target: aosp_atd
             arch: x86_64
           - api-level: 33
             target: android-tv
             arch: x86
-          - api-level: UpsideDownCake-ext5
-            target: google_apis
+          - api-level: 34
+            target: aosp_atd
             arch: x86_64
+          - api-level: 34
+            target: android-tv
+            arch: x86
     steps:
       - name: checkout
         uses: actions/checkout@v3
-      - name: Set up JDK 11
+      - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
-          java-version: '11'
           distribution: 'temurin'
+          java-version: '17'
           cache: 'gradle'
       - name: run tests
-        uses: yujincheng08/android-emulator-runner@release/apilevel
+        uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
           arch: ${{ matrix.arch }}
