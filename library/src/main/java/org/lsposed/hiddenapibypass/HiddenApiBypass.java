@@ -27,7 +27,6 @@ import androidx.annotation.VisibleForTesting;
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandleInfo;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
@@ -52,11 +51,9 @@ public final class HiddenApiBypass {
     private static final long methodOffset;
     private static final long classOffset;
     private static final long artOffset;
-    private static final long infoOffset;
     private static final long methodsOffset;
     private static final long iFieldOffset;
     private static final long sFieldOffset;
-    private static final long memberOffset;
     private static final long artMethodSize;
     private static final long artMethodBias;
     private static final long artFieldSize;
@@ -71,11 +68,9 @@ public final class HiddenApiBypass {
             methodOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("artMethod"));
             classOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("declaringClass"));
             artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
-            infoOffset = unsafe.objectFieldOffset(Helper.MethodHandleImpl.class.getDeclaredField("info"));
             methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
             iFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("iFields"));
             sFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("sFields"));
-            memberOffset = unsafe.objectFieldOffset(Helper.HandleInfo.class.getDeclaredField("member"));
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
             Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
             mA.setAccessible(true);
@@ -221,13 +216,7 @@ public final class HiddenApiBypass {
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * artMethodSize + artMethodBias;
             unsafe.putLong(mh, artOffset, method);
-            unsafe.putObject(mh, infoOffset, null);
-            try {
-                MethodHandles.lookup().revealDirect(mh);
-            } catch (Throwable ignored) {
-            }
-            MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
-            Executable member = (Executable) unsafe.getObject(info, memberOffset);
+            Executable member = MethodHandles.reflectAs(Executable.class, mh);
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + clazz.getTypeName() + "." + member.getName() +
                         "(" + Arrays.stream(member.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
@@ -314,13 +303,7 @@ public final class HiddenApiBypass {
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
-            unsafe.putObject(mh, infoOffset, null);
-            try {
-                MethodHandles.lookup().revealDirect(mh);
-            } catch (Throwable ignored) {
-            }
-            MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
-            Field member = (Field) unsafe.getObject(info, memberOffset);
+            Field member = MethodHandles.reflectAs(Field.class, mh);
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
             list.add(member);
@@ -353,13 +336,7 @@ public final class HiddenApiBypass {
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
-            unsafe.putObject(mh, infoOffset, null);
-            try {
-                MethodHandles.lookup().revealDirect(mh);
-            } catch (Throwable ignored) {
-            }
-            MethodHandleInfo info = (MethodHandleInfo) unsafe.getObject(mh, infoOffset);
-            Field member = (Field) unsafe.getObject(info, memberOffset);
+            Field member = MethodHandles.reflectAs(Field.class, mh);
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
             list.add(member);

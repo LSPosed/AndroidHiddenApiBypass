@@ -32,15 +32,6 @@ public class Helper {
         protected final long artFieldOrMethod = 0;
     }
 
-    static final public class MethodHandleImpl extends MethodHandle {
-        private final MethodHandleInfo info = null;
-    }
-
-    static final public class HandleInfo {
-        private final Member member = null;
-        private final MethodHandle handle = null;
-    }
-
     static final public class Class {
         private transient ClassLoader classLoader;
         private transient java.lang.Class<?> componentType;
