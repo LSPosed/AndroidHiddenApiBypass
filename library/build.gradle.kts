@@ -9,8 +9,8 @@ plugins {
 }
 
 android {
-    compileSdk = 34
-    buildToolsVersion = "34.0.0"
+    compileSdk = 35
+    buildToolsVersion = "35.0.1"
     namespace = "org.lsposed.hiddenapibypass.library"
 
     buildFeatures {
@@ -22,7 +22,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     testOptions {
-        targetSdk = 34
+        targetSdk = 35
     }
     buildTypes {
         release {
