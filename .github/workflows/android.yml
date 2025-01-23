@@ -33,7 +33,7 @@ jobs:
         ORG_GRADLE_PROJECT_signingKey: ${{ secrets.maven_pgp_signingKey }}
         ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.maven_pgp_signingPassword }}
     - name: Upload library
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.os }}-library
         path: ~/.m2
