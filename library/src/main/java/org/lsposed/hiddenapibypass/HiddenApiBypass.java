@@ -59,6 +59,7 @@ class CoreOjClassLoader extends PathClassLoader {
         try {
             return findClass(name);
         } catch (Throwable ignored) {
+            // no class file in jar before art moved to apex.
         }
         if (Executable.class.getName().equals(name)) {
             return Helper.Executable.class;
