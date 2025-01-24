@@ -26,6 +26,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
+import java.io.File;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
@@ -41,8 +42,44 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import dalvik.system.PathClassLoader;
 import dalvik.system.VMRuntime;
 import sun.misc.Unsafe;
+
+@RequiresApi(Build.VERSION_CODES.P)
+class CoreOjClassLoader extends PathClassLoader {
+    static String getCoreOjPath() {
+        if (new File("/apex/com.android.art/javalib/core-oj.jar").exists()) {
+            return "/apex/com.android.art/javalib/core-oj.jar";
+        } else if (new File("/apex/com.android.runtime/javalib/core-oj.jar").exists()) {
+            return "/apex/com.android.runtime/javalib/core-oj.jar";
+        }
+        return "";
+    }
+
+    public CoreOjClassLoader() {
+        super(getCoreOjPath(), null);
+    }
+
+    @Override
+    public Class<?> loadClass(String name) throws ClassNotFoundException {
+        if (Object.class.getName().equals(name)) {
+            return Object.class;
+        }
+        try {
+            return findClass(name);
+        } catch (Throwable ignored) {
+        }
+        if (Executable.class.getName().equals(name)) {
+            return Helper.Executable.class;
+        } else if (MethodHandle.class.getName().equals(name)) {
+            return Helper.MethodHandle.class;
+        } else if (Class.class.getName().equals(name)) {
+            return Helper.Class.class;
+        }
+        return super.loadClass(name);
+    }
+}
 
 @RequiresApi(Build.VERSION_CODES.P)
 public final class HiddenApiBypass {
@@ -65,12 +102,16 @@ public final class HiddenApiBypass {
             //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
             assert unsafe != null;
-            methodOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("artMethod"));
-            classOffset = unsafe.objectFieldOffset(Helper.Executable.class.getDeclaredField("declaringClass"));
-            artOffset = unsafe.objectFieldOffset(Helper.MethodHandle.class.getDeclaredField("artFieldOrMethod"));
-            methodsOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("methods"));
-            iFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("iFields"));
-            sFieldOffset = unsafe.objectFieldOffset(Helper.Class.class.getDeclaredField("sFields"));
+            ClassLoader bootClassloader = new CoreOjClassLoader();
+            Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
+            Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
+            Class<?> classClass = bootClassloader.loadClass(Class.class.getName());
+            methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
+            classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
+            artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
+            methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
+            iFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+            sFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
             Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
             mA.setAccessible(true);
@@ -233,7 +274,7 @@ public final class HiddenApiBypass {
      * @param parameterTypes argument types of the expected method with name {@code methodName}
      * @return the found method
      * @throws NoSuchMethodException when no method matches the given parameters
-     * @see Class#getDeclaredMethod(String, Class[]) 
+     * @see Class#getDeclaredMethod(String, Class[])
      */
     @NonNull
     public static Method getDeclaredMethod(@NonNull Class<?> clazz, @NonNull String methodName, @NonNull Class<?>... parameterTypes) throws NoSuchMethodException {
