@@ -47,16 +47,8 @@ import sun.misc.Unsafe;
 
 @RequiresApi(Build.VERSION_CODES.P)
 class CoreOjClassLoader extends PathClassLoader {
-    static String getCoreOjPath() {
-        String bootClassPath = System.getenv("BOOTCLASSPATH");
-        if (bootClassPath == null) {
-            return "";
-        }
-        return bootClassPath.split(":", 2)[0];
-    }
-
     public CoreOjClassLoader() {
-        super(getCoreOjPath(), null);
+        super(System.getenv("BOOTCLASSPATH"), null);
     }
 
     @Override
