@@ -1,6 +1,8 @@
 # AndroidHiddenApiBypass
 
 [![Android CI status](https://github.com/LSPosed/AndroidHiddenApiBypass/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/LSPosed/AndroidHiddenApiBypass/actions/workflows/android.yml)
+![](https://img.shields.io/badge/Android-1.0%20--%2016-blue.svg)
+![](https://img.shields.io/maven-central/v/org.lsposed.hiddenapibypass/hiddenapibypass.svg)
 
 Bypass restrictions on non-SDK interfaces.
 
@@ -8,7 +10,7 @@ Bypass restrictions on non-SDK interfaces.
 
 - Pure Java: no native code used.
 - Reliable: does not rely on specific behaviors, so it will not be blocked like meta-reflection or `dexfile`.
-- Stable: `unsafe`, art structs and `setHiddenApiExemptions` are stable APIs.
+- Stable: `unsafe` and `setHiddenApiExemptions` are stable APIs. We will be [noticed](https://github.com/LSPosed/AndroidHiddenApiBypass/issues/52) by Google before the art structs changes.
 
 [How it works (Chinese)](https://lovesykun.cn/archives/android-hidden-api-bypass.html)
 
