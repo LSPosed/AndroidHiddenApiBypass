@@ -26,7 +26,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
-import java.io.File;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
@@ -48,17 +47,8 @@ import sun.misc.Unsafe;
 
 @RequiresApi(Build.VERSION_CODES.P)
 class CoreOjClassLoader extends PathClassLoader {
-    static String getCoreOjPath() {
-        if (new File("/apex/com.android.art/javalib/core-oj.jar").exists()) {
-            return "/apex/com.android.art/javalib/core-oj.jar";
-        } else if (new File("/apex/com.android.runtime/javalib/core-oj.jar").exists()) {
-            return "/apex/com.android.runtime/javalib/core-oj.jar";
-        }
-        return "";
-    }
-
     public CoreOjClassLoader() {
-        super(getCoreOjPath(), null);
+        super(System.getProperty("java.boot.class.path", ""), null);
     }
 
     @Override
@@ -69,6 +59,7 @@ class CoreOjClassLoader extends PathClassLoader {
         try {
             return findClass(name);
         } catch (Throwable ignored) {
+            // no class file in jar before art moved to apex.
         }
         if (Executable.class.getName().equals(name)) {
             return Helper.Executable.class;

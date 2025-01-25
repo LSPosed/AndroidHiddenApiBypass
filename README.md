@@ -10,7 +10,7 @@ Bypass restrictions on non-SDK interfaces.
 
 - Pure Java: no native code used.
 - Reliable: does not rely on specific behaviors, so it will not be blocked like meta-reflection or `dexfile`.
-- Stable: `unsafe` and `setHiddenApiExemptions` are stable APIs. We will be [noticed](https://github.com/LSPosed/AndroidHiddenApiBypass/issues/52) by Google before the art structs changes.
+- Stable: does not rely on internal ART structures on Android 10+. `unsafe` and `setHiddenApiExemptions` are stable APIs.
 
 [How it works (Chinese)](https://lovesykun.cn/archives/android-hidden-api-bypass.html)
 
