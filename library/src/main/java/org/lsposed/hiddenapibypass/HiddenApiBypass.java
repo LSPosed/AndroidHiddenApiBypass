@@ -408,7 +408,7 @@ public final class HiddenApiBypass {
             Object runtime = invoke(VMRuntime.class, null, "getRuntime");
             invoke(VMRuntime.class, runtime, "setHiddenApiExemptions", (Object) signaturePrefixes);
             return true;
-        } catch (Throwable e) {
+        } catch (ReflectiveOperationException e) {
             Log.w(TAG, "setHiddenApiExemptions", e);
             return false;
         }
