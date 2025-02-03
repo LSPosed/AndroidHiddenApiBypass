@@ -33,6 +33,7 @@ import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -106,9 +107,14 @@ public final class HiddenApiBypass {
             methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
             classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
             artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
+            long fieldOffset;
+            try {
+                fieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+            } catch (NoSuchFieldException e) {
+                fieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+            }
+            iFieldOffset = fieldOffset;
             methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
-            iFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
-            sFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
             Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
             mA.setAccessible(true);
@@ -139,6 +145,11 @@ public final class HiddenApiBypass {
                     Long.toString(jAddr, 16) + ", " +
                     Long.toString(iFields, 16));
             artFieldBias = iAddr - iFields;
+            if (unsafe.getInt(unsafe.getLong(Helper.NeverCall.class, iFieldOffset)) == 4) {
+                sFieldOffset = iFieldOffset;
+            } else {
+                sFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
+            }
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
@@ -337,14 +348,15 @@ public final class HiddenApiBypass {
         long fields = unsafe.getLong(clazz, iFieldOffset);
         if (fields == 0) return list;
         int numFields = unsafe.getInt(fields);
-        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " instance fields");
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
             Field member = MethodHandles.reflectAs(Field.class, mh);
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
-            list.add(member);
+            if (!Modifier.isStatic(member.getModifiers()))
+                list.add(member);
         }
         return list;
     }
@@ -370,14 +382,15 @@ public final class HiddenApiBypass {
         long fields = unsafe.getLong(clazz, sFieldOffset);
         if (fields == 0) return list;
         int numFields = unsafe.getInt(fields);
-        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " static fields");
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
             Field member = MethodHandles.reflectAs(Field.class, mh);
             if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
-            list.add(member);
+            if (Modifier.isStatic(member.getModifiers()))
+                list.add(member);
         }
         return list;
     }
