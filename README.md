@@ -33,7 +33,7 @@ dependencies {
 
 ## Usage
 
-This library has two variants of bypassing. We recommend to use variant 1 for most usecases because it should be more stable across different Android versions, and below code is based on it. Check `LSPass` class for API definition if you want to use variant 2.
+This library has two variants of bypassing. Variant 1 is stable, while variant 2 is fast but maybe blocked in future Android releases. We recommend to use variant 1 for most usecases. Check `LSPass` class for API definition if you want to use variant 2.
 
 1. Invoke a restricted method:
     ```java
