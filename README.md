@@ -29,7 +29,7 @@ dependencies {
 
 ## Usage
 
-This library has two variants of bypassing. Below code is based on variant 1. Import `LSPass` class if you want to use variant 2.
+This library has two variants of bypassing. We recommned to use variant 1 and below code is based on it. Check `LSPass` class for API definition if you want to use variant 2.
 
 1. Invoke a restricted method:
     ```java
