@@ -22,7 +22,6 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
-import androidx.annotation.VisibleForTesting;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
@@ -37,47 +36,11 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-import dalvik.system.PathClassLoader;
-import dalvik.system.VMRuntime;
-import sun.misc.Unsafe;
-
-@RequiresApi(Build.VERSION_CODES.P)
-class CoreOjClassLoader extends PathClassLoader {
-    private static String getCoreOjPath() {
-        String bootClassPath = System.getProperty("java.boot.class.path", "");
-        assert bootClassPath != null;
-        return bootClassPath.split(":", 2)[0];
-    }
-
-    public CoreOjClassLoader() {
-        super(getCoreOjPath(), null);
-    }
-
-    @Override
-    public Class<?> loadClass(String name) throws ClassNotFoundException {
-        if (Object.class.getName().equals(name)) {
-            return Object.class;
-        }
-        try {
-            return findClass(name);
-        } catch (Throwable ignored) {
-            // no class file in jar before art moved to apex.
-        }
-        if (Executable.class.getName().equals(name)) {
-            return Helper.Executable.class;
-        } else if (MethodHandle.class.getName().equals(name)) {
-            return Helper.MethodHandle.class;
-        } else if (Class.class.getName().equals(name)) {
-            return Helper.Class.class;
-        }
-        return super.loadClass(name);
-    }
-}
+import stub.dalvik.system.VMRuntime;
+import stub.sun.misc.Unsafe;
 
 @RequiresApi(Build.VERSION_CODES.P)
 public final class HiddenApiBypass {
@@ -93,7 +56,6 @@ public final class HiddenApiBypass {
     private static final long artMethodBias;
     private static final long artFieldSize;
     private static final long artFieldBias;
-    private static final Set<String> signaturePrefixes = new HashSet<>();
 
     static {
         try {
@@ -107,13 +69,17 @@ public final class HiddenApiBypass {
             methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
             classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
             artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
-            long fieldOffset;
+            long iField;
+            long sField;
             try {
-                fieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+                sField = iField;
             } catch (NoSuchFieldException e) {
-                fieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+                sField = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
             }
-            iFieldOffset = fieldOffset;
+            iFieldOffset = iField;
+            sFieldOffset = sField;
             methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
             Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
@@ -145,33 +111,10 @@ public final class HiddenApiBypass {
                     Long.toString(jAddr, 16) + ", " +
                     Long.toString(iFields, 16));
             artFieldBias = iAddr - iFields;
-            if (unsafe.getInt(unsafe.getLong(Helper.NeverCall.class, iFieldOffset)) == 4) {
-                sFieldOffset = iFieldOffset;
-            } else {
-                sFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
-            }
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
         }
-    }
-
-    @VisibleForTesting
-    static boolean checkArgsForInvokeMethod(Class<?>[] params, Object[] args) {
-        if (params.length != args.length) return false;
-        for (int i = 0; i < params.length; ++i) {
-            if (params[i].isPrimitive()) {
-                if (params[i] == int.class && !(args[i] instanceof Integer)) return false;
-                else if (params[i] == byte.class && !(args[i] instanceof Byte)) return false;
-                else if (params[i] == char.class && !(args[i] instanceof Character)) return false;
-                else if (params[i] == boolean.class && !(args[i] instanceof Boolean)) return false;
-                else if (params[i] == double.class && !(args[i] instanceof Double)) return false;
-                else if (params[i] == float.class && !(args[i] instanceof Float)) return false;
-                else if (params[i] == long.class && !(args[i] instanceof Long)) return false;
-                else if (params[i] == short.class && !(args[i] instanceof Short)) return false;
-            } else if (args[i] != null && !params[i].isInstance(args[i])) return false;
-        }
-        return true;
     }
 
     /**
@@ -199,7 +142,7 @@ public final class HiddenApiBypass {
                 unsafe.putLong(ctor, methodOffset, method);
                 unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
-                if (checkArgsForInvokeMethod(params, initargs))
+                if (Helper.checkArgsForInvokeMethod(params, initargs))
                     return ctor.newInstance(initargs);
             }
         }
@@ -233,7 +176,7 @@ public final class HiddenApiBypass {
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if (methodName.equals(stub.getName())) {
                 Class<?>[] params = stub.getParameterTypes();
-                if (checkArgsForInvokeMethod(params, args))
+                if (Helper.checkArgsForInvokeMethod(params, args))
                     return stub.invoke(thiz, args);
             }
         }
@@ -248,20 +191,20 @@ public final class HiddenApiBypass {
      */
     @NonNull
     public static List<Executable> getDeclaredMethods(@NonNull Class<?> clazz) {
-        ArrayList<Executable> list = new ArrayList<>();
-        if (clazz.isPrimitive() || clazz.isArray()) return list;
+        if (clazz.isPrimitive() || clazz.isArray()) return List.of();
         MethodHandle mh;
         try {
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
             mA.setAccessible(true);
             mh = MethodHandles.lookup().unreflect(mA);
         } catch (NoSuchMethodException | IllegalAccessException e) {
-            return list;
+            return List.of();
         }
         long methods = unsafe.getLong(clazz, methodsOffset);
-        if (methods == 0) return list;
+        if (methods == 0) return List.of();
         int numMethods = unsafe.getInt(methods);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numMethods + " methods");
+        List<Executable> list = new ArrayList<>(numMethods);
         for (int i = 0; i < numMethods; i++) {
             long method = methods + i * artMethodSize + artMethodBias;
             unsafe.putLong(mh, artOffset, method);
@@ -335,20 +278,20 @@ public final class HiddenApiBypass {
      */
     @NonNull
     public static List<Field> getInstanceFields(@NonNull Class<?> clazz) {
-        ArrayList<Field> list = new ArrayList<>();
-        if (clazz.isPrimitive() || clazz.isArray()) return list;
+        if (clazz.isPrimitive() || clazz.isArray()) return List.of();
         MethodHandle mh;
         try {
             Field fI = Helper.NeverCall.class.getDeclaredField("i");
             fI.setAccessible(true);
             mh = MethodHandles.lookup().unreflectGetter(fI);
         } catch (IllegalAccessException | NoSuchFieldException e) {
-            return list;
+            return List.of();
         }
         long fields = unsafe.getLong(clazz, iFieldOffset);
-        if (fields == 0) return list;
+        if (fields == 0) return List.of();
         int numFields = unsafe.getInt(fields);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
+        List<Field> list = new ArrayList<>(numFields);
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
@@ -369,20 +312,20 @@ public final class HiddenApiBypass {
      */
     @NonNull
     public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
-        ArrayList<Field> list = new ArrayList<>();
-        if (clazz.isPrimitive() || clazz.isArray()) return list;
+        if (clazz.isPrimitive() || clazz.isArray()) return List.of();
         MethodHandle mh;
         try {
             Field fS = Helper.NeverCall.class.getDeclaredField("s");
             fS.setAccessible(true);
             mh = MethodHandles.lookup().unreflectGetter(fS);
         } catch (IllegalAccessException | NoSuchFieldException e) {
-            return list;
+            return List.of();
         }
         long fields = unsafe.getLong(clazz, sFieldOffset);
-        if (fields == 0) return list;
+        if (fields == 0) return List.of();
         int numFields = unsafe.getInt(fields);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
+        List<Field> list = new ArrayList<>(numFields);
         for (int i = 0; i < numFields; i++) {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
@@ -423,9 +366,9 @@ public final class HiddenApiBypass {
      * @return whether the operation is successful
      */
     public static boolean addHiddenApiExemptions(String... signaturePrefixes) {
-        HiddenApiBypass.signaturePrefixes.addAll(Arrays.asList(signaturePrefixes));
-        String[] strings = new String[HiddenApiBypass.signaturePrefixes.size()];
-        HiddenApiBypass.signaturePrefixes.toArray(strings);
+        Helper.signaturePrefixes.addAll(Arrays.asList(signaturePrefixes));
+        String[] strings = new String[Helper.signaturePrefixes.size()];
+        Helper.signaturePrefixes.toArray(strings);
         return setHiddenApiExemptions(strings);
     }
 
@@ -437,7 +380,7 @@ public final class HiddenApiBypass {
      * @return whether the operation is successful
      */
     public static boolean clearHiddenApiExemptions() {
-        HiddenApiBypass.signaturePrefixes.clear();
+        Helper.signaturePrefixes.clear();
         return setHiddenApiExemptions();
     }
 }

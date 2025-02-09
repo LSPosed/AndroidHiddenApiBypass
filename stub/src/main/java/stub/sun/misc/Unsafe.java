@@ -1,4 +1,4 @@
-package sun.misc;
+package stub.sun.misc;
 
 @SuppressWarnings({"unused", "rawtypes"})
 public class Unsafe {

@@ -1,4 +1,4 @@
-package org.lsposed.lspass;
+package org.lsposed.hiddenapibypass;
 
 import android.os.Build;
 import android.util.Log;
@@ -12,19 +12,20 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
 
-import dalvik.system.VMRuntime;
+import stub.dalvik.system.VMRuntime;
 
+@SuppressWarnings("rawtypes")
 @RequiresApi(Build.VERSION_CODES.P)
 public final class LSPass {
     private static final String TAG = "LSPass";
     private static final Property<Class, Method[]> methods;
     private static final Property<Class, Constructor[]> constructors;
     private static final Property<Class, Field[]> fields;
-    private static final Set<String> signaturePrefixes = new HashSet<>();
 
     static {
         methods = Property.of(Class.class, Method[].class, "DeclaredMethods");
@@ -32,51 +33,66 @@ public final class LSPass {
         fields = Property.of(Class.class, Field[].class, "DeclaredFields");
     }
 
-    private static boolean checkArgsForInvokeMethod(Class<?>[] params, Object[] args) {
-        if (params.length != args.length) return false;
-        for (int i = 0; i < params.length; ++i) {
-            if (params[i].isPrimitive()) {
-                if (params[i] == int.class && !(args[i] instanceof Integer)) return false;
-                else if (params[i] == byte.class && !(args[i] instanceof Byte)) return false;
-                else if (params[i] == char.class && !(args[i] instanceof Character)) return false;
-                else if (params[i] == boolean.class && !(args[i] instanceof Boolean)) return false;
-                else if (params[i] == double.class && !(args[i] instanceof Double)) return false;
-                else if (params[i] == float.class && !(args[i] instanceof Float)) return false;
-                else if (params[i] == long.class && !(args[i] instanceof Long)) return false;
-                else if (params[i] == short.class && !(args[i] instanceof Short)) return false;
-            } else if (args[i] != null && !params[i].isInstance(args[i])) return false;
-        }
-        return true;
-    }
-
     /**
      * get declared methods of given class without hidden api restriction
      *
      * @param clazz the class to fetch declared methods
-     * @return array of declared methods of {@code clazz}
+     * @return list of declared methods of {@code clazz}
      */
-    public static Method[] getDeclaredMethods(@NonNull Class<?> clazz) {
-        return methods.get(clazz);
+    public static List<Method> getDeclaredMethods(@NonNull Class<?> clazz) {
+        return Arrays.asList(methods.get(clazz));
     }
 
     /**
      * get declared constructors of given class without hidden api restriction
      *
      * @param clazz the class to fetch declared constructors
-     * @return array of declared constructors of {@code clazz}
+     * @return list of declared constructors of {@code clazz}
      */
-    public static Constructor<?>[] getDeclaredConstructors(@NonNull Class<?> clazz) {
-        return constructors.get(clazz);
+    public static List<Constructor<?>> getDeclaredConstructors(@NonNull Class<?> clazz) {
+        return Arrays.<Constructor<?>>asList(constructors.get(clazz));
     }
 
     /**
      * get declared fields of given class without hidden api restriction
      *
      * @param clazz the class to fetch declared methods
-     * @return array of declared fields of {@code clazz}
+     * @return list of declared fields of {@code clazz}
      */
-    public static Field[] getDeclaredFields(@NonNull Class<?> clazz) {
-        return fields.get(clazz);
+    public static List<Field> getDeclaredFields(@NonNull Class<?> clazz) {
+        return Arrays.asList(fields.get(clazz));
+    }
+
+    /**
+     * get declared non-static fields of given class without hidden api restriction
+     *
+     * @param clazz the class to fetch declared methods
+     * @return list of declared non-static fields of {@code clazz}
+     */
+    @NonNull
+    public static List<Field> getInstanceFields(@NonNull Class<?> clazz) {
+        var list = new ArrayList<Field>();
+        for (var member : getDeclaredFields(clazz)) {
+            if (!Modifier.isStatic(member.getModifiers()))
+                list.add(member);
+        }
+        return list;
+    }
+
+    /**
+     * get declared static fields of given class without hidden api restriction
+     *
+     * @param clazz the class to fetch declared methods
+     * @return list of declared static fields of {@code clazz}
+     */
+    @NonNull
+    public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
+        var list = new ArrayList<Field>();
+        for (var member : getDeclaredFields(clazz)) {
+            if (Modifier.isStatic(member.getModifiers()))
+                list.add(member);
+        }
+        return list;
     }
 
     /**
@@ -91,11 +107,11 @@ public final class LSPass {
      */
     @NonNull
     public static Method getDeclaredMethod(@NonNull Class<?> clazz, @NonNull String methodName, @NonNull Class<?>... parameterTypes) throws NoSuchMethodException {
-        Method[] methods = getDeclaredMethods(clazz);
+        var methods = getDeclaredMethods(clazz);
         all:
-        for (Method method : methods) {
+        for (var method : methods) {
             if (!method.getName().equals(methodName)) continue;
-            Class<?>[] expectedTypes = method.getParameterTypes();
+            var expectedTypes = method.getParameterTypes();
             if (expectedTypes.length != parameterTypes.length) continue;
             for (int i = 0; i < parameterTypes.length; ++i) {
                 if (parameterTypes[i] != expectedTypes[i]) continue all;
@@ -116,10 +132,10 @@ public final class LSPass {
      */
     @NonNull
     public static Constructor<?> getDeclaredConstructor(@NonNull Class<?> clazz, @NonNull Class<?>... parameterTypes) throws NoSuchMethodException {
-        Constructor<?>[] constructors = getDeclaredConstructors(clazz);
+        var constructors = getDeclaredConstructors(clazz);
         all:
-        for (Constructor<?> constructor : constructors) {
-            Class<?>[] expectedTypes = constructor.getParameterTypes();
+        for (var constructor : constructors) {
+            var expectedTypes = constructor.getParameterTypes();
             if (expectedTypes.length != parameterTypes.length) continue;
             for (int i = 0; i < parameterTypes.length; ++i) {
                 if (parameterTypes[i] != expectedTypes[i]) continue all;
@@ -138,10 +154,10 @@ public final class LSPass {
      * @see Constructor#newInstance(Object...)
      */
     public static Object newInstance(@NonNull Class<?> clazz, Object... initargs) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
-        Constructor<?>[] constructors = getDeclaredConstructors(clazz);
-        for (Constructor<?> constructor : constructors) {
-            Class<?>[] params = constructor.getParameterTypes();
-            if (!checkArgsForInvokeMethod(params, initargs)) continue;
+        var constructors = getDeclaredConstructors(clazz);
+        for (var constructor : constructors) {
+            var params = constructor.getParameterTypes();
+            if (!Helper.checkArgsForInvokeMethod(params, initargs)) continue;
             constructor.setAccessible(true);
             return constructor.newInstance(initargs);
         }
@@ -159,11 +175,11 @@ public final class LSPass {
      * @see Method#invoke(Object, Object...)
      */
     public static Object invoke(@NonNull Class<?> clazz, @Nullable Object thiz, @NonNull String methodName, Object... args) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        Method[] methods = getDeclaredMethods(clazz);
-        for (Method method : methods) {
+        var methods = getDeclaredMethods(clazz);
+        for (var method : methods) {
             if (!method.getName().equals(methodName)) continue;
-            Class<?>[] params = method.getParameterTypes();
-            if (!checkArgsForInvokeMethod(params, args)) continue;
+            var params = method.getParameterTypes();
+            if (!Helper.checkArgsForInvokeMethod(params, args)) continue;
             method.setAccessible(true);
             return method.invoke(thiz, args);
         }
@@ -180,7 +196,7 @@ public final class LSPass {
      */
     public static boolean setHiddenApiExemptions(@NonNull String... signaturePrefixes) {
         try {
-            Object runtime = invoke(VMRuntime.class, null, "getRuntime");
+            var runtime = invoke(VMRuntime.class, null, "getRuntime");
             invoke(VMRuntime.class, runtime, "setHiddenApiExemptions", (Object) signaturePrefixes);
             return true;
         } catch (ReflectiveOperationException e) {
@@ -198,9 +214,9 @@ public final class LSPass {
      * @return whether the operation is successful
      */
     public static boolean addHiddenApiExemptions(String... signaturePrefixes) {
-        LSPass.signaturePrefixes.addAll(Arrays.asList(signaturePrefixes));
-        String[] strings = new String[LSPass.signaturePrefixes.size()];
-        LSPass.signaturePrefixes.toArray(strings);
+        Helper.signaturePrefixes.addAll(Arrays.asList(signaturePrefixes));
+        var strings = new String[Helper.signaturePrefixes.size()];
+        Helper.signaturePrefixes.toArray(strings);
         return setHiddenApiExemptions(strings);
     }
 
@@ -212,7 +228,7 @@ public final class LSPass {
      * @return whether the operation is successful
      */
     public static boolean clearHiddenApiExemptions() {
-        LSPass.signaturePrefixes.clear();
+        Helper.signaturePrefixes.clear();
         return setHiddenApiExemptions();
     }
 }

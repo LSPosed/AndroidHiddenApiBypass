@@ -1,4 +1,12 @@
 import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.instrumentation.AsmClassVisitorFactory
+import com.android.build.api.instrumentation.ClassContext
+import com.android.build.api.instrumentation.ClassData
+import com.android.build.api.instrumentation.InstrumentationParameters
+import com.android.build.api.instrumentation.InstrumentationScope
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.commons.ClassRemapper
+import org.objectweb.asm.commons.Remapper
 
 plugins {
     alias(libs.plugins.agp.lib)
@@ -30,8 +38,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     packaging {
         resources {
@@ -53,6 +61,32 @@ dependencies {
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.test.rules)
     androidTestCompileOnly(projects.stub)
+}
+
+androidComponents.onVariants { variant ->
+    variant.instrumentation.transformClassesWith(
+        ClassVisitorFactory::class.java, InstrumentationScope.PROJECT
+    ) {}
+}
+
+abstract class ClassVisitorFactory : AsmClassVisitorFactory<InstrumentationParameters.None> {
+    override fun createClassVisitor(
+        classContext: ClassContext,
+        nextClassVisitor: ClassVisitor
+    ): ClassVisitor {
+        return ClassRemapper(nextClassVisitor, object : Remapper() {
+            override fun map(name: String): String {
+                if (name.startsWith("stub/")) {
+                    return name.substring(name.indexOf('/') + 1)
+                }
+                return name
+            }
+        })
+    }
+
+    override fun isInstrumentable(classData: ClassData): Boolean {
+        return classData.className.endsWith("ass")
+    }
 }
 
 @CacheableTask
