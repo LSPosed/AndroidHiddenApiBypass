@@ -1,4 +1,4 @@
-# AndroidHiddenApiBypass
+# Android Hidden Api Bypass
 
 [![Android CI status](https://github.com/LSPosed/AndroidHiddenApiBypass/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/LSPosed/AndroidHiddenApiBypass/actions/workflows/android.yml)
 ![](https://img.shields.io/badge/Android-1.0%20--%2016-blue.svg)
@@ -6,17 +6,23 @@
 
 Bypass restrictions on non-SDK interfaces.
 
-## Why AndroidHiddenApiBypass?
+## Why HiddenApiBypass?
 
 - Pure Java: no native code used.
 - Reliable: does not rely on specific behaviors, so it will not be blocked like meta-reflection or `dexfile`.
-- Stable: does not rely on internal ART structures on Android 10+. `unsafe` and `setHiddenApiExemptions` are stable APIs.
+- Stable: does not rely on internal ART structures on Android 10+. `Unsafe` and `setHiddenApiExemptions` are stable APIs.
+
+## And LSPass?
+
+- Fast: no I/O, initializing faster than HiddenApiBypass.
+- Safe: no `Unsafe`.
+- Unreliable: can be blocked as easily as meta-reflection.
 
 ## How it works
 
-[Variant 1 (Chinese)](https://lovesykun.cn/archives/android-hidden-api-bypass.html)
+HiddenApiBypass: [Unsafe](https://lovesykun.cn/archives/android-hidden-api-bypass.html)
 
-[Variant 2](https://github.com/michalbednarski/LeakValue?tab=readme-ov-file#putting-it-all-together)
+LSPass: [Property.of()](https://github.com/michalbednarski/LeakValue?tab=readme-ov-file#putting-it-all-together)
 
 ## Integration
 
@@ -33,7 +39,9 @@ dependencies {
 
 ## Usage
 
-This library has two variants of bypassing. Variant 2 is faster than variant 1 but maybe blocked in future Android releases. We recommend to use variant 1 for most usecases. Check `LSPass` class for API definition if you want to use variant 2.
+This library has two variants of bypassing, they have the same API.
+When initializing, LSPass is faster than HiddenApiBypass, but LSPass maybe blocked in future Android releases.
+Replace `HiddenApiBypass` with `LSPass` if you do not want to use `Unsafe`.
 
 1. Invoke a restricted method:
     ```java
