@@ -12,7 +12,7 @@ Bypass restrictions on non-SDK interfaces.
 - Reliable: does not rely on specific behaviors, so it will not be blocked like meta-reflection or `dexfile`.
 - Stable: does not rely on internal ART structures on Android 10+. `unsafe` and `setHiddenApiExemptions` are stable APIs.
 
-[How it works (Chinese)](https://lovesykun.cn/archives/android-hidden-api-bypass.html)
+[How it works (Variant 1, Chinese)](https://lovesykun.cn/archives/android-hidden-api-bypass.html)
 
 ## Integration
 
@@ -28,6 +28,8 @@ dependencies {
 ```
 
 ## Usage
+
+This library has two variants of bypassing. Below code is based on variant 1. Import `LSPass` class if you want to use variant 2.
 
 1. Invoke a restricted method:
     ```java
@@ -69,6 +71,10 @@ dependencies {
     ```java
     HiddenApiBypass.addHiddenApiExemptions("");
     ```
+
+## Credits
+Thank Michał Bednarski for the [bypassing idea](https://github.com/michalbednarski/LeakValue?tab=readme-ov-file#putting-it-all-together) of variant 2.
+
 ## License
 
     Copyright 2021-2025 LSPosed
