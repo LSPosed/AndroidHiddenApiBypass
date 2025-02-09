@@ -75,7 +75,6 @@ This library has two variants of bypassing. Variant 2 is faster than variant 1 b
     ```java
     HiddenApiBypass.addHiddenApiExemptions("");
     ```
-
 ## License
 
     Copyright 2021-2025 LSPosed
