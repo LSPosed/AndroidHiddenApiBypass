@@ -45,7 +45,6 @@ download_cf() {
   local sys_img_url="https://ci.android.com/builds/submitted/${build_id}/${target}/latest/raw/${device}-img-${build_id}.zip"
   local host_pkg_url="https://ci.android.com/builds/submitted/${build_id}/${target}/latest/raw/cvd-host_package.tar.gz"
 
-  print_title "* Download $target ($build_id) images"
   curl -L $sys_img_url -o aosp_cf_phone-img.zip
   curl -LO $host_pkg_url
   rm -rf $CF_HOME
