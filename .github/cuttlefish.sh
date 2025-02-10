@@ -57,7 +57,7 @@ download_cf() {
 
 test_main() {
   run_cvd_bin launch_cvd $cvd_args
-  timeout 600 adb wait-for-device
+  adb wait-for-device
   ./gradlew connectedCheck
   run_cvd_bin stop_cvd || true
 }
