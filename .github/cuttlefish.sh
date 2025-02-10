@@ -16,7 +16,7 @@ run_cvd_bin() {
 }
 
 setup_env() {
-  curl -LO hhttps://github.com/user-attachments/files/18728876/cuttlefish-base_1.2.0_amd64.zip
+  curl -LO https://github.com/user-attachments/files/18728876/cuttlefish-base_1.2.0_amd64.zip
   sudo dpkg -i ./cuttlefish-base_*_*64.zip || sudo apt-get install -f
   rm cuttlefish-base_*_*64.zip
   echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -57,7 +57,7 @@ download_cf() {
 
 test_main() {
   run_cvd_bin launch_cvd $cvd_args
-  adb wait-for-device
+  timeout 600 adb wait-for-device
   ./gradlew connectedCheck
   run_cvd_bin stop_cvd || true
 }

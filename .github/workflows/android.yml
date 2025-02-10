@@ -1,6 +1,10 @@
 name: Build
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - 'main'
 
 jobs:
   build:
@@ -138,11 +142,9 @@ jobs:
         run: |
           .github/cuttlefish.sh setup
           .github/cuttlefish.sh download ${{ matrix.branch }} ${{ matrix.device }}
-
       - name: Run Cuttlefish test
         timeout-minutes: 10
         run: su $USER -c '.github/cuttlefish.sh test'
-
       - name: Upload logs on error
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
