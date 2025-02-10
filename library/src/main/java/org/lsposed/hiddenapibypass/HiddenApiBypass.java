@@ -72,7 +72,7 @@ public final class HiddenApiBypass {
             long iField;
             long sField;
             try {
-                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("xxfields"));
+                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
                 sField = iField;
             } catch (NoSuchFieldException e) {
                 iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
