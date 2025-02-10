@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+set -xe
 export PATH="$PATH:$ANDROID_HOME/platform-tools"
 sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 cvd_args="-daemon -enable_sandbox=false -memory_mb=8192 -report_anonymous_usage_stats=n"
