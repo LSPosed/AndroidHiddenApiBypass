@@ -25,20 +25,23 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Optional;
 
-import dalvik.system.VMRuntime;
-
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.P)
 @RunWith(AndroidJUnit4.class)
 public class HiddenApiBypassTest {
 
+    private final Class<?> runtime = Class.forName("dalvik.system.VMRuntime");
+
     @Rule
     public ExpectedException exception = ExpectedException.none();
 
+    public HiddenApiBypassTest() throws ClassNotFoundException {
+    }
+
     @Test
     public void AgetDeclaredMethods() {
-        List<Executable> methods = HiddenApiBypass.getDeclaredMethods(VMRuntime.class);
+        List<Executable> methods = HiddenApiBypass.getDeclaredMethods(runtime);
         Optional<Executable> getRuntime = methods.stream().filter(it -> it.getName().equals("getRuntime")).findFirst();
         assertTrue(getRuntime.isPresent());
         Optional<Executable> setHiddenApiExemptions = methods.stream().filter(it -> it.getName().equals("setHiddenApiExemptions")).findFirst();
@@ -52,7 +55,7 @@ public class HiddenApiBypassTest {
 
     @Test(expected = NoSuchMethodException.class)
     public void CsetHiddenApiExemptionsIsHiddenApi() throws NoSuchMethodException {
-        VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
+        runtime.getMethod("setHiddenApiExemptions", String[].class);
     }
 
     @Test(expected = NoSuchMethodException.class)
@@ -69,6 +72,7 @@ public class HiddenApiBypassTest {
     public void FHiddenApiEnforcementDefaultIsHiddenApi() throws NoSuchFieldException {
         ApplicationInfo.class.getDeclaredField("HIDDEN_API_ENFORCEMENT_DEFAULT");
     }
+
     @Test
     public void GtestGetInstanceFields() {
         assertTrue(HiddenApiBypass.getInstanceFields(ApplicationInfo.class).stream().anyMatch(i -> i.getName().equals("longVersionCode")));
@@ -112,7 +116,7 @@ public class HiddenApiBypassTest {
         assertTrue(HiddenApiBypass.setHiddenApiExemptions("L"));
         ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
         assertTrue(HiddenApiBypass.clearHiddenApiExemptions());
-        VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
+        runtime.getMethod("setHiddenApiExemptions", String[].class);
     }
 
     @Test
@@ -120,22 +124,22 @@ public class HiddenApiBypassTest {
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;"));
         ApplicationInfo.class.getMethod("getHiddenApiEnforcementPolicy");
         assertTrue(HiddenApiBypass.addHiddenApiExemptions("Ldalvik/system/VMRuntime;"));
-        VMRuntime.class.getMethod("setHiddenApiExemptions", String[].class);
+        runtime.getMethod("setHiddenApiExemptions", String[].class);
     }
 
     @Test
     public void OtestCheckArgsForInvokeMethod() {
         class X {
         }
-        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{}, new Object[]{new Object()}));
-        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{1}));
-        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{1.0}));
-        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{null}));
-        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Integer.class}, new Object[]{1}));
-        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Integer.class}, new Object[]{null}));
-        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class}, new Object[]{new X()}));
-        assertFalse(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{X.class}, new Object[]{new Object()}));
-        assertTrue(HiddenApiBypass.checkArgsForInvokeMethod(new Class[]{Object.class, int.class, byte.class, short.class, char.class, double.class, float.class, boolean.class, long.class}, new Object[]{new X(), 1, (byte) 0, (short) 2, 'c', 1.1, 1.2f, false, 114514L}));
+        assertFalse(Helper.checkArgsForInvokeMethod(new Class[]{}, new Object[]{new Object()}));
+        assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{1}));
+        assertFalse(Helper.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{1.0}));
+        assertFalse(Helper.checkArgsForInvokeMethod(new Class[]{int.class}, new Object[]{null}));
+        assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{Integer.class}, new Object[]{1}));
+        assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{Integer.class}, new Object[]{null}));
+        assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{Object.class}, new Object[]{new X()}));
+        assertFalse(Helper.checkArgsForInvokeMethod(new Class[]{X.class}, new Object[]{new Object()}));
+        assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{Object.class, int.class, byte.class, short.class, char.class, double.class, float.class, boolean.class, long.class}, new Object[]{new X(), 1, (byte) 0, (short) 2, 'c', 1.1, 1.2f, false, 114514L}));
     }
 
 }

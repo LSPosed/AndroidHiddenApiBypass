@@ -1,5 +1,6 @@
-package org.lsposed.lspass;
+package org.lsposed.hiddenapibypass;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
@@ -17,7 +18,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.Arrays;
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -41,12 +41,18 @@ public class LSPassTest {
     }
 
     @Test
-    public void DtestgetDeclaredFields() {
-        assertTrue(Arrays.stream(LSPass.getDeclaredFields(ActivityOptions.class)).anyMatch(i -> i.getName().equals("mHeight")));
+    public void DgetDeclaredFieldsTest() {
+        var fields = LSPass.getDeclaredFields(ActivityOptions.class);
+        assertTrue(fields.stream().anyMatch(i -> i.getName().equals("mHeight")));
+        var instance = LSPass.getInstanceFields(ActivityOptions.class);
+        assertTrue(instance.stream().anyMatch(i -> i.getName().equals("mHeight")));
+        var staticFields = LSPass.getStaticFields(ActivityOptions.class);
+        assertTrue(staticFields.stream().anyMatch(i -> i.getName().equals("ANIM_NONE")));
+        assertEquals(fields.size(), instance.size() + staticFields.size());
     }
 
     @Test
-    public void EtestgetDeclaredFields() throws NoSuchMethodException {
+    public void EgetDeclaredMethodTest() throws NoSuchMethodException {
         assertNotNull(LSPass.getDeclaredMethod(ActivityOptions.class, "getHeight"));
     }
 
@@ -55,5 +61,19 @@ public class LSPassTest {
         assertNotEquals(null, LSPass.getDeclaredConstructor(ActivityOptions.class));
         Object instance = LSPass.newInstance(ActivityOptions.class);
         assertSame(ActivityOptions.class, instance.getClass());
+    }
+
+    @Test(expected = NoSuchFieldException.class)
+    public void GclearHiddenApiExemptionsTest() throws NoSuchFieldException {
+        assertTrue(LSPass.addHiddenApiExemptions("L"));
+        assertTrue(LSPass.clearHiddenApiExemptions());
+        ActivityOptions.class.getDeclaredField("mHeight");
+    }
+
+    @Test
+    public void HaddHiddenApiExemptionsTest() throws NoSuchMethodException {
+        assertTrue(LSPass.addHiddenApiExemptions("L"));
+        assertTrue(LSPass.addHiddenApiExemptions("xx"));
+        ActivityOptions.class.getDeclaredMethod("getHeight");
     }
 }
