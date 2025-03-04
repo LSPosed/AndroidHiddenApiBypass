@@ -323,6 +323,12 @@ public final class HiddenApiBypass {
         }
         long fields = unsafe.getLong(clazz, sFieldOffset);
         if (fields == 0) return List.of();
+        //Fix: Android16 Beta2 crashed( signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000100000401).
+        if ((fields & 0x7) != 0) {
+            Log.w(TAG, "invalid offset addr:" + Long.toHexString(fields));
+            return List.of();
+        }
+
         int numFields = unsafe.getInt(fields);
         if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
         List<Field> list = new ArrayList<>(numFields);
