@@ -26,9 +26,17 @@ LSPass: [Property.of()](https://github.com/michalbednarski/LeakValue?tab=readme-
 
 ## Integration
 
-Gradle:
+Google Play doesn't allow apps to use hidden APIs, reporting library usage will cause your app to fail app review,
+you need to disable dependencies info reporting in build.gradle.
+Remember to update this library to latest version to be compatible with new Android version.
 
 ```gradle
+android {
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+}
 repositories {
     mavenCentral()
 }
