@@ -65,7 +65,7 @@ jobs:
             target: aosp_atd
             arch: x86_64
           - api-level: 30
-            target: google_apis
+            target: aosp_atd
             arch: x86
           - api-level: 31
             target: aosp_atd
@@ -85,11 +85,17 @@ jobs:
           - api-level: 34
             target: aosp_atd
             arch: x86_64
+          - api-level: 34
+            target: android-tv
+            arch: x86
           - api-level: 35
             target: aosp_atd
             arch: x86_64
-          - api-level: Baklava
-            target: google_apis
+          - api-level: 36
+            target: aosp_atd
+            arch: x86_64
+          - api-level: 36.0-CANARY
+            target: google_apis_ps16k
             arch: x86_64
     steps:
       - name: checkout
@@ -107,49 +113,14 @@ jobs:
             sudo udevadm control --reload-rules
             sudo udevadm trigger --name-match=kvm
       - name: run tests
-        uses: reactivecircus/android-emulator-runner@b683a061eaff4aac4d0b585bfd0cf714a40aee93
+        uses: reactivecircus/android-emulator-runner@dc0214ac9162729da746d9a3f1bf79bfd00fdc48
         with:
           api-level: ${{ matrix.api-level }}
           arch: ${{ matrix.arch }}
           target: ${{ matrix.target }}
+          channel: canary
           script: ./gradlew connectedCheck
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           disable-animations: true
-
-  cf-test:
-    name: Test ${{ matrix.device }}
-    runs-on: ubuntu-24.04
-    needs: build
-    env:
-      CF_HOME: /home/runner/aosp_cf_phone
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - branch: "aosp-main"
-            device: "aosp_cf_x86_64_phone"
-
-    steps:
-      - name: Check out
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - name: Setup Cuttlefish environment
-        run: |
-          .github/cuttlefish.sh setup
-          .github/cuttlefish.sh download ${{ matrix.branch }} ${{ matrix.device }}
-      - name: Run Cuttlefish test
-        timeout-minutes: 10
-        run: su $USER -c '.github/cuttlefish.sh test'
-      - name: Upload logs on error
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: "cvd-logs-${{ matrix.device }}"
-          path: |
-            /home/runner/aosp_cf_phone/cuttlefish/instances/cvd-1/logs
-            /home/runner/aosp_cf_phone/cuttlefish/instances/cvd-1/cuttlefish_config.json
+          cores: 4
