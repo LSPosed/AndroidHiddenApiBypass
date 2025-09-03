@@ -113,7 +113,7 @@ jobs:
             sudo udevadm control --reload-rules
             sudo udevadm trigger --name-match=kvm
       - name: run tests
-        uses: reactivecircus/android-emulator-runner@2c0c552a2bc5598611906e66dc8637b354db0f97
+        uses: reactivecircus/android-emulator-runner@0c67c11ddd4633d91a0ddb1f4e6ebd618e691db1
         with:
           api-level: ${{ matrix.api-level }}
           arch: ${{ matrix.arch }}
