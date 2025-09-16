@@ -83,7 +83,7 @@ Replace `HiddenApiBypass` with `LSPass` if you do not want to use `Unsafe`.
     ```java
     HiddenApiBypass.addHiddenApiExemptions(
         "Landroid/content/pm/ApplicationInfo;", // one specific class
-        "Ldalvik/system" // all classes in packages dalvik.system
+        "Ldalvik/system", // all classes in packages dalvik.system
         "Lx" // all classes whose full name is started with x
     );
     ```
