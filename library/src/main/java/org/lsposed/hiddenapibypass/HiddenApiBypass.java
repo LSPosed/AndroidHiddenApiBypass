@@ -140,10 +140,11 @@ public final class HiddenApiBypass {
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if ("<init>".equals(stub.getName())) {
                 unsafe.putLong(ctor, methodOffset, method);
-                unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
-                if (Helper.checkArgsForInvokeMethod(params, initargs))
+                if (Helper.checkArgsForInvokeMethod(params, initargs)) {
+                    unsafe.putObject(ctor, classOffset, clazz);
                     return ctor.newInstance(initargs);
+                }
             }
         }
         throw new NoSuchMethodException("Cannot find matching constructor");
