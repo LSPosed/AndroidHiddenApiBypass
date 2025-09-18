@@ -175,6 +175,9 @@ public final class LSPass {
      * @see Method#invoke(Object, Object...)
      */
     public static Object invoke(@NonNull Class<?> clazz, @Nullable Object thiz, @NonNull String methodName, Object... args) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        if (thiz != null && !clazz.isInstance(thiz)) {
+            throw new IllegalArgumentException("this object is not an instance of the given class");
+        }
         var methods = getDeclaredMethods(clazz);
         for (var method : methods) {
             if (!method.getName().equals(methodName)) continue;
