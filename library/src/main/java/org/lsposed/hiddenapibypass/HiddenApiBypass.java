@@ -161,9 +161,6 @@ public final class HiddenApiBypass {
      * @see Method#invoke(Object, Object...)
      */
     public static Object invoke(@NonNull Class<?> clazz, @Nullable Object thiz, @NonNull String methodName, Object... args) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        if (thiz != null && !clazz.isInstance(thiz)) {
-            throw new IllegalArgumentException("this object is not an instance of the given class");
-        }
         Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
         stub.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
