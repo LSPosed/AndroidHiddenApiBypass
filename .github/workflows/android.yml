@@ -63,8 +63,8 @@ jobs:
             arch: x86
           - api-level: 30
             target: aosp_atd
-            arch: x86_64
-          - api-level: 30
+[![Build](https://github.com/LSPosed/AndroidHiddenApiBypass/actions/workflows/android.yml/badge.svg)](https://github.com/LSPosed/AndroidHiddenApiBypass/actions/workflows/android.yml)
+- api-level: 30
             target: aosp_atd
             arch: x86
           - api-level: 31
