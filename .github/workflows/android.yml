@@ -116,7 +116,7 @@ jobs:
           arch: ${{ matrix.arch }}
           target: ${{ matrix.target }}
           channel: canary
-          script: ./gradlew connectedCheck
+          script: ./gradlew connectedCheck && ./gradlew connectedCheck -Pandroid.testInstrumentationRunnerArguments.load=true
           force-avd-creation: false
           emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           disable-animations: true

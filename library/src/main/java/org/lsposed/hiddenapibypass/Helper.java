@@ -23,6 +23,19 @@ import java.util.Set;
 @SuppressWarnings("unused")
 public class Helper {
     static final Set<String> signaturePrefixes = new HashSet<>();
+    static long[] cachedOffsetData = null;
+
+    public static long[] getCachedOffsetData() {
+        return cachedOffsetData;
+    }
+
+    public static void setCachedOffsetData(long[] data) {
+        if (cachedOffsetData == null && data.length == 10) {
+            cachedOffsetData = data;
+        } else {
+            throw new IllegalArgumentException();
+        }
+    }
 
     static boolean checkArgsForInvokeMethod(java.lang.Class<?>[] params, Object[] args) {
         if (params.length != args.length) return false;

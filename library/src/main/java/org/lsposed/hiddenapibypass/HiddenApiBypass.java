@@ -61,60 +61,93 @@ public final class HiddenApiBypass {
         try {
             //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
-            assert unsafe != null;
-            ClassLoader bootClassloader = new CoreOjClassLoader();
-            Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
-            Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
-            Class<?> classClass = bootClassloader.loadClass(Class.class.getName());
-            methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
-            classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
-            artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
-            long iField;
-            long sField;
-            try {
-                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
-                sField = iField;
-            } catch (NoSuchFieldException e) {
-                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
-                sField = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
+            if (Helper.cachedOffsetData == null) {
+                Helper.cachedOffsetData = readOffsetData();
+            } else if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Using cached offset data");
             }
-            iFieldOffset = iField;
-            sFieldOffset = sField;
-            methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
-            Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
-            Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
-            mA.setAccessible(true);
-            mB.setAccessible(true);
-            MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
-            MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
-            long aAddr = unsafe.getLong(mhA, artOffset);
-            long bAddr = unsafe.getLong(mhB, artOffset);
-            long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
-            artMethodSize = bAddr - aAddr;
-            if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
-                    Long.toString(aAddr, 16) + ", " +
-                    Long.toString(bAddr, 16) + ", " +
-                    Long.toString(aMethods, 16));
-            artMethodBias = aAddr - aMethods - artMethodSize;
-            Field fI = Helper.NeverCall.class.getDeclaredField("i");
-            Field fJ = Helper.NeverCall.class.getDeclaredField("j");
-            fI.setAccessible(true);
-            fJ.setAccessible(true);
-            MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
-            MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
-            long iAddr = unsafe.getLong(mhI, artOffset);
-            long jAddr = unsafe.getLong(mhJ, artOffset);
-            long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
-            artFieldSize = jAddr - iAddr;
-            if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
-                    Long.toString(iAddr, 16) + ", " +
-                    Long.toString(jAddr, 16) + ", " +
-                    Long.toString(iFields, 16));
-            artFieldBias = iAddr - iFields;
+            var data = Helper.cachedOffsetData;
+            methodOffset = data[0];
+            classOffset = data[1];
+            artOffset = data[2];
+            methodsOffset = data[3];
+            iFieldOffset = data[4];
+            sFieldOffset = data[5];
+            artMethodSize = data[6];
+            artMethodBias = data[7];
+            artFieldSize = data[8];
+            artFieldBias = data[9];
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
         }
+
+    }
+
+    private static long[] readOffsetData() throws ReflectiveOperationException {
+        ClassLoader bootClassloader = new CoreOjClassLoader();
+        Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
+        Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
+        Class<?> classClass = bootClassloader.loadClass(Class.class.getName());
+        var methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
+        var classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
+        var artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
+        var methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
+
+        long iField;
+        long sField;
+        try {
+            iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+            sField = iField;
+        } catch (NoSuchFieldException e) {
+            iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+            sField = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
+        }
+
+        Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
+        Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
+        mA.setAccessible(true);
+        mB.setAccessible(true);
+        MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
+        MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
+        long aAddr = unsafe.getLong(mhA, artOffset);
+        long bAddr = unsafe.getLong(mhB, artOffset);
+        long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
+        var artMethodSize = bAddr - aAddr;
+        if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
+                Long.toString(aAddr, 16) + ", " +
+                Long.toString(bAddr, 16) + ", " +
+                Long.toString(aMethods, 16));
+        var artMethodBias = aAddr - aMethods - artMethodSize;
+
+        Field fI = Helper.NeverCall.class.getDeclaredField("i");
+        Field fJ = Helper.NeverCall.class.getDeclaredField("j");
+        fI.setAccessible(true);
+        fJ.setAccessible(true);
+        MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
+        MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
+        long iAddr = unsafe.getLong(mhI, artOffset);
+        long jAddr = unsafe.getLong(mhJ, artOffset);
+        long iFields = unsafe.getLong(Helper.NeverCall.class, iField);
+        var artFieldSize = jAddr - iAddr;
+        if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
+                Long.toString(iAddr, 16) + ", " +
+                Long.toString(jAddr, 16) + ", " +
+                Long.toString(iFields, 16));
+        var artFieldBias = iAddr - iFields;
+
+        long[] data = new long[10];
+        data[0] = methodOffset;
+        data[1] = classOffset;
+        data[2] = artOffset;
+        data[3] = methodsOffset;
+        data[4] = iField;
+        data[5] = sField;
+        data[6] = artMethodSize;
+        data[7] = artMethodBias;
+        data[8] = artFieldSize;
+        data[9] = artFieldBias;
+        return data;
     }
 
     /**
