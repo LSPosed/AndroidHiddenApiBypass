@@ -17,20 +17,22 @@ plugins {
 }
 
 android {
-    compileSdk = 35
-    buildToolsVersion = "35.0.1"
+    compileSdk = 36
+    buildToolsVersion = "36.1.0"
     namespace = "org.lsposed.hiddenapibypass.library"
 
     buildFeatures {
-        androidResources = false
         buildConfig = true
+    }
+    androidResources {
+        enable = false
     }
     defaultConfig {
         minSdk = 1
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     testOptions {
-        targetSdk = 35
+        targetSdk = 36
     }
     buildTypes {
         release {
@@ -61,12 +63,6 @@ dependencies {
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.test.rules)
     androidTestCompileOnly(projects.stub)
-}
-
-androidComponents.onVariants { variant ->
-    variant.instrumentation.transformClassesWith(
-        ClassVisitorFactory::class.java, InstrumentationScope.PROJECT
-    ) {}
 }
 
 abstract class ClassVisitorFactory : AsmClassVisitorFactory<InstrumentationParameters.None> {
@@ -102,7 +98,7 @@ abstract class ManifestUpdater : DefaultTask() {
     fun taskAction() {
         outputManifest.get().asFile.writeText(
             mergedManifest.get().asFile.readText()
-                .replace("<uses-sdk ", "<uses-sdk android:targetSdkVersion=\"35\" ")
+                .replace("<uses-sdk ", "<uses-sdk android:targetSdkVersion=\"36\" ")
         )
     }
 }
@@ -118,6 +114,9 @@ androidComponents.onVariants { variant ->
             ManifestUpdater::outputManifest
         )
         .toTransform(SingleArtifact.MERGED_MANIFEST)
+    variant.instrumentation.transformClassesWith(
+        ClassVisitorFactory::class.java, InstrumentationScope.PROJECT
+    ) {}
 }
 
 
