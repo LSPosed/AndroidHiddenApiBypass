@@ -22,9 +22,11 @@ import android.os.Build;
 
 import androidx.annotation.RequiresApi;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -75,17 +77,28 @@ public class Helper {
         }
     }
 
-    private static long getArtVersion(Context context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return 0L;
+    public static long getArtVersion(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return -1L;
         var pm = context.getPackageManager();
         try {
             var moduleInfo = pm.getModuleInfo("com.android.art", 1);
             var name = moduleInfo.getPackageName();
-            if (name == null) return 0L;
+            if (name == null) return -2L;
             var info = pm.getPackageInfo(name, PackageManager.MATCH_APEX);
             return info.getLongVersionCode();
         } catch (PackageManager.NameNotFoundException e) {
-            return 0L;
+            try (var file = new FileReader("/proc/self/mountinfo");
+                 var reader = new BufferedReader(file)) {
+                var line = reader.lines()
+                        .filter(s -> s.contains(" / /apex/com.android.art@"))
+                        .findAny();
+                if (!line.isPresent()) return -3L;
+                var part = line.get().split("@", 2)[1];
+                var versionStr = part.split(" ", 2)[0];
+                return Long.parseLong(versionStr);
+            } catch (Exception e2) {
+                return -4L;
+            }
         }
     }
 

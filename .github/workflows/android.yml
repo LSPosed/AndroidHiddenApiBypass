@@ -91,7 +91,7 @@ jobs:
           - api-level: 36
             target: aosp_atd
             arch: x86_64
-          - api-level: 36.0-CANARY
+          - api-level: CANARY
             target: google_apis_ps16k
             arch: x86_64
     steps:
@@ -121,3 +121,10 @@ jobs:
           emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
           disable-animations: true
           cores: 4
+      - name: Upload outputs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.api-level }}_${{ matrix.arch }}_outputs
+          path: library/build/outputs
+          compression-level: 9
