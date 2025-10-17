@@ -61,12 +61,13 @@ public final class HiddenApiBypass {
         try {
             //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
-            if (Helper.cachedOffsetData == null) {
-                Helper.cachedOffsetData = readOffsetData();
+            var data = Helper.getCachedOffsetData();
+            if (data == null) {
+                data = readOffsetData();
+                Helper.setCachedOffsetData(data);
             } else if (BuildConfig.DEBUG) {
                 Log.d(TAG, "Using cached offset data");
             }
-            var data = Helper.cachedOffsetData;
             methodOffset = data[0];
             classOffset = data[1];
             artOffset = data[2];

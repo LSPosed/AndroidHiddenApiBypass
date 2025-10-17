@@ -1,6 +1,7 @@
 package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
@@ -14,7 +15,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SdkSuppress;
 import androidx.test.platform.app.InstrumentationRegistry;
 
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -23,11 +23,6 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
@@ -38,15 +33,6 @@ import java.util.Optional;
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.P)
 @RunWith(AndroidJUnit4.class)
 public class HiddenApiBypassTest {
-    private static final File file;
-    private static final boolean load;
-
-    static {
-        var arguments = InstrumentationRegistry.getArguments();
-        var context = InstrumentationRegistry.getInstrumentation().getContext();
-        file = new File(context.getFilesDir(), "test");
-        load = arguments.containsKey("load");
-    }
 
     private final Class<?> runtime = Class.forName("dalvik.system.VMRuntime");
 
@@ -57,23 +43,13 @@ public class HiddenApiBypassTest {
     }
 
     @BeforeClass
-    public static void load() throws Exception {
-        if (load) {
-            try (var fis = new FileInputStream(file);
-                 var ois = new ObjectInputStream(fis)) {
-                Helper.setCachedOffsetData((long[]) ois.readObject());
-            }
-        }
-    }
-
-    @AfterClass
-    public static void save() throws Exception {
-        if (!load) {
-            try (var fos = new FileOutputStream(file);
-                 var oos = new ObjectOutputStream(fos)) {
-                oos.writeObject(Helper.getCachedOffsetData());
-            }
-        }
+    public static void setUp() {
+        var context = InstrumentationRegistry.getInstrumentation().getContext();
+        Helper.enableOffsetCache(context);
+        var loaded = Helper.getCachedOffsetData() != null;
+        var arguments = InstrumentationRegistry.getArguments();
+        var load = arguments.containsKey("load");
+        assertEquals(loaded, load);
     }
 
     @Test

@@ -16,24 +16,76 @@
 
 package org.lsposed.hiddenapibypass;
 
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
+
+import androidx.annotation.RequiresApi;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.lang.invoke.MethodType;
 import java.util.HashSet;
 import java.util.Set;
 
+@RequiresApi(Build.VERSION_CODES.P)
 @SuppressWarnings("unused")
 public class Helper {
     static final Set<String> signaturePrefixes = new HashSet<>();
-    static long[] cachedOffsetData = null;
+
+    private static long[] cachedOffsetData = null;
+
+    private static File cacheFile = null;
+    private static long artVersion = 0L;
 
     public static long[] getCachedOffsetData() {
         return cachedOffsetData;
     }
 
     public static void setCachedOffsetData(long[] data) {
-        if (cachedOffsetData == null && data.length == 10) {
-            cachedOffsetData = data;
-        } else {
-            throw new IllegalArgumentException();
+        if (cachedOffsetData != null || data.length != 10) return;
+        cachedOffsetData = data;
+
+        if (cacheFile == null) return;
+        try (var fos = new FileOutputStream(cacheFile);
+             var oos = new ObjectOutputStream(fos)) {
+            oos.writeUTF(Build.FINGERPRINT);
+            oos.writeLong(artVersion);
+            oos.writeObject(cachedOffsetData);
+        } catch (IOException ignored) {
+        }
+    }
+
+    public static void enableOffsetCache(Context context) {
+        cacheFile = new File(context.getCacheDir(), "HiddenApiBypass");
+        artVersion = getArtVersion(context);
+
+        try (var fis = new FileInputStream(cacheFile);
+             var ois = new ObjectInputStream(fis)) {
+            var fingerprint = ois.readUTF();
+            if (!Build.FINGERPRINT.equals(fingerprint)) return;
+            var art = ois.readLong();
+            if (artVersion != art) return;
+            cachedOffsetData = (long[]) ois.readObject();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static long getArtVersion(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return 0L;
+        var pm = context.getPackageManager();
+        try {
+            var moduleInfo = pm.getModuleInfo("com.android.art", 1);
+            var name = moduleInfo.getPackageName();
+            if (name == null) return 0L;
+            var info = pm.getPackageInfo(name, PackageManager.MATCH_APEX);
+            return info.getLongVersionCode();
+        } catch (PackageManager.NameNotFoundException e) {
+            return 0L;
         }
     }
 
