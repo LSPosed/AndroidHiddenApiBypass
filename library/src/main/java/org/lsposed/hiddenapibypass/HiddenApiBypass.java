@@ -63,7 +63,7 @@ public final class HiddenApiBypass {
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
             var data = Helper.getCachedOffsetData();
             if (data == null) {
-                data = readOffsetData();
+                data = readOffsetDataIO();
                 Helper.setCachedOffsetData(data);
             } else if (BuildConfig.DEBUG) {
                 Log.d(TAG, "Using cached offset data");
@@ -74,18 +74,18 @@ public final class HiddenApiBypass {
             methodsOffset = data[3];
             iFieldOffset = data[4];
             sFieldOffset = data[5];
-            artMethodSize = data[6];
-            artMethodBias = data[7];
-            artFieldSize = data[8];
-            artFieldBias = data[9];
+            var dataRT = readOffsetDataRT();
+            artMethodSize = dataRT[0];
+            artMethodBias = dataRT[1];
+            artFieldSize = dataRT[2];
+            artFieldBias = dataRT[3];
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
         }
-
     }
 
-    private static long[] readOffsetData() throws ReflectiveOperationException {
+    private static long[] readOffsetDataIO() throws ReflectiveOperationException {
         ClassLoader bootClassloader = new CoreOjClassLoader();
         Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
         Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
@@ -95,16 +95,27 @@ public final class HiddenApiBypass {
         var artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
         var methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
 
-        long iField;
-        long sField;
+        long iFieldOffset;
+        long sFieldOffset;
         try {
-            iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
-            sField = iField;
+            iFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+            sFieldOffset = iFieldOffset;
         } catch (NoSuchFieldException e) {
-            iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
-            sField = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
+            iFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+            sFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
         }
 
+        long[] data = new long[6];
+        data[0] = methodOffset;
+        data[1] = classOffset;
+        data[2] = artOffset;
+        data[3] = methodsOffset;
+        data[4] = iFieldOffset;
+        data[5] = sFieldOffset;
+        return data;
+    }
+
+    private static long[] readOffsetDataRT() throws ReflectiveOperationException {
         Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
         Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
         mA.setAccessible(true);
@@ -129,7 +140,7 @@ public final class HiddenApiBypass {
         MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
         long iAddr = unsafe.getLong(mhI, artOffset);
         long jAddr = unsafe.getLong(mhJ, artOffset);
-        long iFields = unsafe.getLong(Helper.NeverCall.class, iField);
+        long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
         var artFieldSize = jAddr - iAddr;
         if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
                 Long.toString(iAddr, 16) + ", " +
@@ -137,17 +148,11 @@ public final class HiddenApiBypass {
                 Long.toString(iFields, 16));
         var artFieldBias = iAddr - iFields;
 
-        long[] data = new long[10];
-        data[0] = methodOffset;
-        data[1] = classOffset;
-        data[2] = artOffset;
-        data[3] = methodsOffset;
-        data[4] = iField;
-        data[5] = sField;
-        data[6] = artMethodSize;
-        data[7] = artMethodBias;
-        data[8] = artFieldSize;
-        data[9] = artFieldBias;
+        long[] data = new long[4];
+        data[0] = artMethodSize;
+        data[1] = artMethodBias;
+        data[2] = artFieldSize;
+        data[3] = artFieldBias;
         return data;
     }
 

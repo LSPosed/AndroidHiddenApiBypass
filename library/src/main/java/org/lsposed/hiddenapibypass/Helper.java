@@ -49,7 +49,7 @@ public class Helper {
     }
 
     public static void setCachedOffsetData(long[] data) {
-        if (cachedOffsetData != null || data.length != 10) return;
+        if (cachedOffsetData != null || data.length != 6) return;
         cachedOffsetData = data;
 
         if (cacheFile == null) return;
@@ -63,6 +63,7 @@ public class Helper {
     }
 
     public static void enableOffsetCache(Context context) {
+        if (cacheFile != null) return;
         cacheFile = new File(context.getCacheDir(), "HiddenApiBypass");
         artVersion = getArtVersion(context);
 

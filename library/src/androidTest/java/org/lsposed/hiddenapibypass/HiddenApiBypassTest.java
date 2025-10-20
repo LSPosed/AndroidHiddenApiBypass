@@ -11,7 +11,6 @@ import static org.junit.Assert.assertTrue;
 import android.content.pm.ApplicationInfo;
 import android.graphics.drawable.ClipDrawable;
 import android.os.Build;
-import android.os.Process;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SdkSuppress;
@@ -165,20 +164,14 @@ public class HiddenApiBypassTest {
     public void PtestCachedOffset() {
         var context = InstrumentationRegistry.getInstrumentation().getContext();
         var artVersion = Helper.getArtVersion(context);
-        var isOld = artVersion == -1L;
         var isNew = artVersion >= 36_00_00000L;
-        var is64bit = Process.is64Bit();
-        var data = new long[10];
+        var data = new long[6];
         data[0] = 24;
         data[1] = 12;
         data[2] = 24;
         data[3] = 48;
         data[4] = 40;
         data[5] = isNew ? 40 : 56;
-        data[6] = isOld ? is64bit ? 40 : 28 : is64bit ? 32 : 24;
-        data[7] = is64bit ? 8 : 4;
-        data[8] = 16;
-        data[9] = 4;
         assertArrayEquals("art version " + artVersion, data, Helper.getCachedOffsetData());
     }
 
