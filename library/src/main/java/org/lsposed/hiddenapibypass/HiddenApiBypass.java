@@ -25,6 +25,7 @@ import androidx.annotation.RequiresApi;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
+import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
@@ -86,6 +87,12 @@ public final class HiddenApiBypass {
     }
 
     private static long[] readOffsetDataIO() throws ReflectiveOperationException {
+        try {
+            return DexFieldLayout.readOffsetData();
+        } catch (IOException | ReflectiveOperationException | RuntimeException e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to read offset data from dex", e);
+        }
+
         ClassLoader bootClassloader = new CoreOjClassLoader();
         Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
         Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());

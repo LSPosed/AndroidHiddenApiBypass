@@ -91,6 +91,15 @@ jobs:
           - api-level: 36
             target: aosp_atd
             arch: x86_64
+          - api-level: 36
+            target: android-tv
+            arch: x86
+          - api-level: '36.1'
+            target: google_apis_ps16k
+            arch: x86_64
+          - api-level: '37.0'
+            target: google_apis_ps16k
+            arch: x86_64
           - api-level: CANARY
             target: google_apis_ps16k
             arch: x86_64

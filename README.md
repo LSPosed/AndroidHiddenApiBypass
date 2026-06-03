@@ -16,7 +16,7 @@ Bypass restrictions on non-SDK interfaces.
 
 - Fast: no I/O, initializing faster than HiddenApiBypass.
 - Safe: no `Unsafe`.
-- Unreliable: can be blocked as easily as meta-reflection.
+- Unreliable: can be blocked as easily as meta-reflection and cannot be used to access core platform api if [core platform api restriction](https://android.googlesource.com/platform/art/+/refs/tags/android-security-16.0.0_r4/runtime/runtime.cc#1730) is enabled in future Android releases.
 
 ## How it works
 
