@@ -47,7 +47,7 @@ jobs:
   test:
     name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -99,19 +99,24 @@ jobs:
             arch: x86
           - api-level: '36.1'
             target: google_apis
-            arch: x86_64
+            arch: arm64-v8a
+            os: macos-latest
           - api-level: '37.0'
             target: google_apis
-            arch: x86_64
+            arch: arm64-v8a
+            os: macos-latest
           - api-level: '37.1'
             target: android-desktop
-            arch: x86_64
+            arch: arm64-v8a
+            os: macos-latest
           - api-level: '37.2'
             target: google_apis_ps16k
-            arch: x86_64
+            arch: arm64-v8a
+            os: macos-latest
           - api-level: CANARY
             target: google_apis_ps16k
-            arch: x86_64
+            arch: arm64-v8a
+            os: macos-latest
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -123,11 +128,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
       - name: Enable KVM group perms
+        if: runner.os == 'Linux'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Free Disk Space
+        if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@v2
         with:
           android: false
@@ -159,18 +166,27 @@ jobs:
       - name: Collect emulator diagnostics
         if: ${{ failure() }}
         run: |
-          adb="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platform-tools/adb"
-          mkdir -p emulator-diagnostics
-          cp -r ~/.android/avd emulator-diagnostics/avd 2>/dev/null || true
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+          adb="$sdk/platform-tools/adb"
+          mkdir -p emulator-diagnostics/avd
+          # Only the small ini/log files: the AVD directory also holds multi-GB disk images.
+          cp ~/.android/avd/*.ini emulator-diagnostics/avd/ 2>/dev/null || true
+          cp ~/.android/avd/test.avd/*.ini emulator-diagnostics/avd/ 2>/dev/null || true
+          cp ~/.android/avd/test.avd/*.log emulator-diagnostics/avd/ 2>/dev/null || true
+          ls -la ~/.android/avd ~/.android/avd/test.avd > emulator-diagnostics/avd-contents.txt 2>&1 || true
           cp -r /tmp/android-* emulator-diagnostics/ 2>/dev/null || true
+          cp -r "${TMPDIR:-/tmp}"/android-* emulator-diagnostics/ 2>/dev/null || true
           cp /tmp/emulator-console.log emulator-diagnostics/ 2>/dev/null || true
-          ls -la ~/.android/avd/test.avd > emulator-diagnostics/avd-contents.txt 2>&1 || true
           "$adb" devices -l > emulator-diagnostics/adb-devices.txt 2>&1 || true
-          "$adb" -s emulator-5554 shell getprop > emulator-diagnostics/guest-getprop.txt 2>&1 || true
-          "$adb" -s emulator-5554 logcat -d -v threadtime > emulator-diagnostics/guest-logcat.txt 2>&1 || true
-          "$adb" -s emulator-5554 shell dmesg > emulator-diagnostics/guest-dmesg.txt 2>&1 || true
+          state="$("$adb" -s emulator-5554 get-state 2>&1 || true)"
+          printf '%s\n' "$state" > emulator-diagnostics/guest-adb-state.txt
+          if [ "$state" = "device" ]; then
+            "$adb" -s emulator-5554 shell getprop > emulator-diagnostics/guest-getprop.txt 2>&1 || true
+            "$adb" -s emulator-5554 logcat -d -v threadtime > emulator-diagnostics/guest-logcat.txt 2>&1 || true
+            "$adb" -s emulator-5554 shell dmesg > emulator-diagnostics/guest-dmesg.txt 2>&1 || true
+          fi
           ps -ef > emulator-diagnostics/host-processes.txt 2>&1 || true
-          free -m > emulator-diagnostics/host-memory.txt 2>&1 || true
+          (command -v free > /dev/null && free -m || vm_stat) > emulator-diagnostics/host-memory.txt 2>&1 || true
           df -h > emulator-diagnostics/host-disk.txt 2>&1 || true
       - name: Upload emulator diagnostics
         if: ${{ failure() }}

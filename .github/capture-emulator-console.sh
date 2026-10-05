@@ -4,7 +4,7 @@
 # Wired through the emulator-runner's pre-emulator-launch-script input, for ps16k images only.
 set -eu
 
-sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 emulator="$sdk/emulator/emulator"
 log=/tmp/emulator-console.log
 
