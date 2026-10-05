@@ -51,12 +51,6 @@ android {
             excludes += "/*.properties"
         }
     }
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-            withJavadocJar()
-        }
-    }
 }
 
 dependencies {
@@ -108,7 +102,10 @@ abstract class ManifestUpdater : DefaultTask() {
 androidComponents.onVariants { variant ->
     val variantName = variant.name
     val manifestUpdater =
-        project.tasks.register("${variantName}ManifestUpdater", ManifestUpdater::class.java)
+        project.tasks.register("${variantName}ManifestUpdater", ManifestUpdater::class.java) {
+            description = "Update the merged manifest to set targetSdkVersion to 37"
+            group = "hiddenapibypass"
+        }
     variant.artifacts.use(manifestUpdater)
         .wiredWithFiles(
             ManifestUpdater::mergedManifest,
@@ -121,41 +118,33 @@ androidComponents.onVariants { variant ->
 }
 
 
+group = "org.lsposed.hiddenapibypass"
+
 val repo = jgit.repo(true)
 version = repo?.latestTag?.removePrefix("v") ?: "0.0"
 println("${rootProject.name} version: $version")
 
 publish {
     githubRepo = "LSPosed/AndroidHiddenApiBypass"
-    publications {
-        register<MavenPublication>("hiddenapibypass") {
-            group = "org.lsposed.hiddenapibypass"
-            artifactId = "hiddenapibypass"
-            version = version
-            afterEvaluate {
-                from(components.getByName("release"))
+    publications("hiddenapibypass") {
+        name = "Android Hidden Api Bypass"
+        description = "Bypass restrictions on non-SDK interfaces"
+        url = "https://github.com/LSPosed/AndroidHiddenApiBypass"
+        licenses {
+            license {
+                name = "The Apache Software License, Version 2.0"
+                url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
             }
-            pom {
-                name = "Android Hidden Api Bypass"
-                description = "Bypass restrictions on non-SDK interfaces"
-                url = "https://github.com/LSPosed/AndroidHiddenApiBypass"
-                licenses {
-                    license {
-                        name = "The Apache Software License, Version 2.0"
-                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-                    }
-                }
-                developers {
-                    developer {
-                        name = "LSPosed"
-                        url = "https://lsposed.org"
-                    }
-                }
-                scm {
-                    connection = "scm:git:https://github.com/LSPosed/AndroidHiddenApiBypass.git"
-                    url = "https://github.com/LSPosed/AndroidHiddenApiBypass"
-                }
+        }
+        developers {
+            developer {
+                name = "LSPosed"
+                url = "https://lsposed.org"
             }
+        }
+        scm {
+            connection = "scm:git:https://github.com/LSPosed/AndroidHiddenApiBypass.git"
+            url = "https://github.com/LSPosed/AndroidHiddenApiBypass"
         }
     }
 }

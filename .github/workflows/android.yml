@@ -16,31 +16,33 @@ jobs:
         os: [ ubuntu-latest, windows-latest, macOS-latest ]
 
     steps:
-    - name: Check out
-      uses: actions/checkout@v4
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '21'
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-    - name: Build with Gradle
-      run: |
-        echo 'org.gradle.caching=true' >> gradle.properties
-        echo 'org.gradle.parallel=true' >> gradle.properties
-        echo 'org.gradle.jvmargs=-Xmx2048m' >> gradle.properties
-        ./gradlew publishToMavenLocal
-      env:
-        GIT_CONFIG_NOSYSTEM: true
-        ORG_GRADLE_PROJECT_signingKey: ${{ secrets.maven_pgp_signingKey }}
-        ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.maven_pgp_signingPassword }}
-    - name: Upload library
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.os }}-library
-        path: ~/.m2
-        include-hidden-files: true
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Build with Gradle
+        run: |
+          echo 'org.gradle.caching=true' >> gradle.properties
+          echo 'org.gradle.parallel=true' >> gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx2048m' >> gradle.properties
+          ./gradlew publishToMavenLocal
+        env:
+          GIT_CONFIG_NOSYSTEM: true
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.maven_pgp_signingKey }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.maven_pgp_signingPassword }}
+      - name: Upload library
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-library
+          path: ~/.m2
+          include-hidden-files: true
 
   test:
     name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
@@ -96,9 +98,15 @@ jobs:
             target: android-tv
             arch: x86
           - api-level: '36.1'
-            target: google_apis_ps16k
+            target: google_apis
             arch: x86_64
           - api-level: '37.0'
+            target: google_apis
+            arch: x86_64
+          - api-level: '37.1'
+            target: android-desktop
+            arch: x86_64
+          - api-level: '37.2'
             target: google_apis_ps16k
             arch: x86_64
           - api-level: CANARY
@@ -106,21 +114,33 @@ jobs:
             arch: x86_64
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '21'
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: Enable KVM group perms
+        if: runner.os == 'Linux'
         run: |
-            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-            sudo udevadm control --reload-rules
-            sudo udevadm trigger --name-match=kvm
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Free Disk Space
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@v2
+        with:
+          android: false
+          dotnet: true
+          haskell: true
+          swap-storage: true
+          docker-images: false
+          large-packages: false
+          preinstalled-runtimes: false
       - name: run tests
-        uses: reactivecircus/android-emulator-runner@dc0214ac9162729da746d9a3f1bf79bfd00fdc48
+        uses: LSPosed/android-emulator-runner@release/v2
         with:
           api-level: ${{ matrix.api-level }}
           arch: ${{ matrix.arch }}
@@ -130,14 +150,51 @@ jobs:
             ./gradlew connectedCheck -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
             ./gradlew connectedCheck -Pandroid.testInstrumentationRunnerArguments.load=true
           force-avd-creation: false
-          emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
+          pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}
           disable-animations: true
+          ram-size: 4096M
+          disk-size: 6000M
+          heap-size: 600M
           cores: 4
         env:
           GIT_CONFIG_NOSYSTEM: true
+      - name: Collect emulator diagnostics
+        if: ${{ failure() }}
+        run: |
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+          adb="$sdk/platform-tools/adb"
+          mkdir -p emulator-diagnostics/avd
+          # Only the small ini/log files: the AVD directory also holds multi-GB disk images.
+          cp ~/.android/avd/*.ini emulator-diagnostics/avd/ 2>/dev/null || true
+          cp ~/.android/avd/test.avd/*.ini emulator-diagnostics/avd/ 2>/dev/null || true
+          cp ~/.android/avd/test.avd/*.log emulator-diagnostics/avd/ 2>/dev/null || true
+          ls -la ~/.android/avd ~/.android/avd/test.avd > emulator-diagnostics/avd-contents.txt 2>&1 || true
+          cp -r /tmp/android-* emulator-diagnostics/ 2>/dev/null || true
+          cp -r "${TMPDIR:-/tmp}"/android-* emulator-diagnostics/ 2>/dev/null || true
+          cp /tmp/emulator-console.log emulator-diagnostics/ 2>/dev/null || true
+          "$adb" devices -l > emulator-diagnostics/adb-devices.txt 2>&1 || true
+          state="$("$adb" -s emulator-5554 get-state 2>&1 || true)"
+          printf '%s\n' "$state" > emulator-diagnostics/guest-adb-state.txt
+          if [ "$state" = "device" ]; then
+            "$adb" -s emulator-5554 shell getprop > emulator-diagnostics/guest-getprop.txt 2>&1 || true
+            "$adb" -s emulator-5554 logcat -d -v threadtime > emulator-diagnostics/guest-logcat.txt 2>&1 || true
+            "$adb" -s emulator-5554 shell dmesg > emulator-diagnostics/guest-dmesg.txt 2>&1 || true
+          fi
+          ps -ef > emulator-diagnostics/host-processes.txt 2>&1 || true
+          (command -v free > /dev/null && free -m || vm_stat) > emulator-diagnostics/host-memory.txt 2>&1 || true
+          df -h > emulator-diagnostics/host-disk.txt 2>&1 || true
+      - name: Upload emulator diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.api-level }}_${{ matrix.arch }}_emulator-diagnostics
+          path: emulator-diagnostics
+          if-no-files-found: warn
+          compression-level: 9
       - name: Upload outputs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.api-level }}_${{ matrix.arch }}_outputs
           path: library/build/outputs
