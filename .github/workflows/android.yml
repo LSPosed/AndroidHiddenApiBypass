@@ -47,7 +47,7 @@ jobs:
   test:
     name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
     needs: build
-    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -99,24 +99,19 @@ jobs:
             arch: x86
           - api-level: '36.1'
             target: google_apis
-            arch: arm64-v8a
-            os: macos-latest
+            arch: x86_64
           - api-level: '37.0'
             target: google_apis
-            arch: arm64-v8a
-            os: macos-latest
+            arch: x86_64
           - api-level: '37.1'
             target: android-desktop
-            arch: arm64-v8a
-            os: macos-latest
+            arch: x86_64
           - api-level: '37.2'
             target: google_apis_ps16k
-            arch: arm64-v8a
-            os: macos-latest
+            arch: x86_64
           - api-level: CANARY
             target: google_apis_ps16k
-            arch: arm64-v8a
-            os: macos-latest
+            arch: x86_64
     steps:
       - name: checkout
         uses: actions/checkout@v7
