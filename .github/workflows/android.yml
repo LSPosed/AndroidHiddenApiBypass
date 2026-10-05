@@ -138,11 +138,36 @@ jobs:
             ./gradlew connectedCheck -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
             ./gradlew connectedCheck -Pandroid.testInstrumentationRunnerArguments.load=true
           force-avd-creation: false
-          emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
+          pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}
           disable-animations: true
           cores: 4
         env:
           GIT_CONFIG_NOSYSTEM: true
+      - name: Collect emulator diagnostics
+        if: ${{ failure() }}
+        run: |
+          adb="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platform-tools/adb"
+          mkdir -p emulator-diagnostics
+          cp -r ~/.android/avd emulator-diagnostics/avd 2>/dev/null || true
+          cp -r /tmp/android-* emulator-diagnostics/ 2>/dev/null || true
+          cp /tmp/emulator-console.log emulator-diagnostics/ 2>/dev/null || true
+          ls -la ~/.android/avd/test.avd > emulator-diagnostics/avd-contents.txt 2>&1 || true
+          "$adb" devices -l > emulator-diagnostics/adb-devices.txt 2>&1 || true
+          "$adb" -s emulator-5554 shell getprop > emulator-diagnostics/guest-getprop.txt 2>&1 || true
+          "$adb" -s emulator-5554 logcat -d -v threadtime > emulator-diagnostics/guest-logcat.txt 2>&1 || true
+          "$adb" -s emulator-5554 shell dmesg > emulator-diagnostics/guest-dmesg.txt 2>&1 || true
+          ps -ef > emulator-diagnostics/host-processes.txt 2>&1 || true
+          free -m > emulator-diagnostics/host-memory.txt 2>&1 || true
+          df -h > emulator-diagnostics/host-disk.txt 2>&1 || true
+      - name: Upload emulator diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.api-level }}_${{ matrix.arch }}_emulator-diagnostics
+          path: emulator-diagnostics
+          if-no-files-found: warn
+          compression-level: 9
       - name: Upload outputs
         if: ${{ failure() }}
         uses: actions/upload-artifact@v7
