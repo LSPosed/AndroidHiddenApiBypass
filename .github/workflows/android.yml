@@ -158,6 +158,7 @@ jobs:
           emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
           pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}
           disable-animations: true
+          ram-size: 4096M
           disk-size: 6000M
           heap-size: 600M
           cores: 4
