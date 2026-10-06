@@ -5,9 +5,8 @@
 # calls this file and everything else lives here.
 #
 # The action waits for sys.boot_completed and runs its own boot commands before this script, so both
-# runs start right away. They run with `--no-daemon`, so no long-lived Gradle JVM competes with the
-# 4 GB emulator on the 16 GB runner: the system_server restarts we chase look like host memory
-# pressure, so host and guest memory are sampled while the tests run.
+# runs start right away. Host and guest memory are sampled while the tests run, and the guest state is
+# captured on failure.
 #
 # Neither run is retried and the guest is never rebooted: a run that does not execute the tests fails
 # the job. On failure the guest state is captured, because the emulator is gone by the time the
@@ -149,7 +148,7 @@ run_phase() {
     slug=$(printf '%s' "$label" | tr ' ' '-')
     shift
     rm -rf library/build/outputs/androidTest-results
-    ./gradlew connectedCheck --no-daemon "$@"
+    ./gradlew connectedCheck "$@"
     status=$?
     if ls "$results"/TEST-*.xml >/dev/null 2>&1; then
         if [ "$status" -ne 0 ]; then
