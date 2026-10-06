@@ -52,6 +52,10 @@ public class Helper {
         if (cachedOffsetData != null || data.length != 6) return;
         cachedOffsetData = data;
 
+        writeCachedOffsetData();
+    }
+
+    private static void writeCachedOffsetData() {
         if (cacheFile == null) return;
         try (var fos = new FileOutputStream(cacheFile);
              var oos = new ObjectOutputStream(fos)) {
@@ -66,6 +70,10 @@ public class Helper {
         if (cacheFile != null) return;
         cacheFile = new File(context.getCacheDir(), "HiddenApiBypass");
         artVersion = getArtVersion(context);
+        if (cachedOffsetData != null) {
+            writeCachedOffsetData();
+            return;
+        }
 
         try (var fis = new FileInputStream(cacheFile);
              var ois = new ObjectInputStream(fis)) {

@@ -21,7 +21,18 @@ run_instrumentation() {
   fi
 }
 
+wait_for_boot() {
+  adb wait-for-device
+  until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+    sleep 1
+  done
+  until adb shell cmd package list packages android >/dev/null 2>&1; do
+    sleep 1
+  done
+}
+
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
+wait_for_boot
 adb uninstall "$test_package" || true
 adb install --no-streaming -r -t "$test_apk"
 adb shell pm clear "$test_package"
