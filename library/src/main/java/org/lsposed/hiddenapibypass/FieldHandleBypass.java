@@ -104,19 +104,15 @@ final class FieldHandleBypass {
             ClassLoader parent = clazz.getClassLoader();
             if (parent == null) parent = FieldHandleBypass.class.getClassLoader();
 
-            var loader = new CloneClassLoader(joinDexPaths(paths), parent, clazz.getName());
-            Class<?> cloned = Class.forName(clazz.getName(), false, loader);
-            classes.put(clazz, cloned);
-            return cloned;
-        }
-
-        private static String joinDexPaths(ArrayList<String> paths) {
-            StringBuilder builder = new StringBuilder();
             for (String path : paths) {
-                if (builder.length() != 0) builder.append(':');
-                builder.append(path);
+                var loader = new CloneClassLoader(path, parent, clazz.getName());
+                Class<?> cloned = Class.forName(clazz.getName(), false, loader);
+                if (cloned != clazz) {
+                    classes.put(clazz, cloned);
+                    return cloned;
+                }
             }
-            return builder.toString();
+            throw new ClassNotFoundException(clazz.getName());
         }
     }
 
