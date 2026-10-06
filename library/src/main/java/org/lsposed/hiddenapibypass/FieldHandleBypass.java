@@ -48,6 +48,7 @@ final class FieldHandleBypass {
     private final long artFieldBias;
     private final long artFieldAccessFlagsOffset;
     private final long artFieldDeclaringClassOffset;
+    private final long artFieldDexIndexOffset;
     private final long artFieldOffsetOffset;
     private final long fieldAccessFlagsOffset;
     private final long fieldArtFieldIndexOffset;
@@ -114,6 +115,7 @@ final class FieldHandleBypass {
                 helperNextArtField, helperNextField);
         artFieldDeclaringClassOffset = findArtFieldDeclaringClassOffset(helperArtField,
                 helperNextArtField, probeArtField, probeNextArtField);
+        artFieldDexIndexOffset = findArtFieldDexIndexOffset();
 
         helperClassReference = unsafe.getInt(helperArtField + artFieldDeclaringClassOffset);
         helperPublicFlags = unsafe.getInt(helperArtField + artFieldAccessFlagsOffset);
@@ -152,8 +154,11 @@ final class FieldHandleBypass {
                     for (int slot = 0; slot < batchSize; ++slot) {
                         long originalField = fields + artFieldBias + artFieldSize * (start + slot);
                         long helperField = helperFirstField + artFieldSize * slot;
+                        int helperDexIndex = unsafe.getInt(savedHelperFields
+                                + artFieldSize * slot + artFieldDexIndexOffset);
                         copyMemory(originalField, helperField, artFieldSize);
                         unsafe.putInt(helperField + artFieldDeclaringClassOffset, helperClassReference);
+                        unsafe.putInt(helperField + artFieldDexIndexOffset, helperDexIndex);
                         unsafe.putInt(helperField + artFieldAccessFlagsOffset, helperPublicFlags);
                     }
                     unsafe.putInt(helperFields, batchSize);
@@ -238,6 +243,17 @@ final class FieldHandleBypass {
             }
         }
         throw new NoSuchFieldException("ArtField.declaring_class_");
+    }
+
+    private long findArtFieldDexIndexOffset() throws NoSuchFieldException {
+        for (long offset = 0; offset < artFieldSize; offset += 4) {
+            if (offset != artFieldDeclaringClassOffset
+                    && offset != artFieldAccessFlagsOffset
+                    && offset != artFieldOffsetOffset) {
+                return offset;
+            }
+        }
+        throw new NoSuchFieldException("ArtField.field_dex_idx_");
     }
 
     private long findArtFieldOffsetOffset(long helperField, Field javaHelperField,
