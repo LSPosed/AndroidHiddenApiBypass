@@ -39,11 +39,20 @@ prop() {
     "$adb" -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
 }
 
-# The drop box lives in /data/system/dropbox, is only readable by root, and its service dies with
-# system_server, so it has to be copied as files. User builds refuse this and fall back to dumpsys.
+adb_is_root() {
+    [ "$("$adb" -s "$serial" shell id -u 2>/dev/null | tr -d '\r')" = "0" ]
+}
+
+# The drop box lives in /data/system/dropbox and is only readable by root, so try to root adb. Images
+# without a debuggable build refuse it, and then only the dumpsys fallback is available.
 enable_root_adb() {
     "$adb" -s "$serial" root >/dev/null 2>&1 || true
     "$adb" -s "$serial" wait-for-device >/dev/null 2>&1 || true
+    if adb_is_root; then
+        echo "::notice::adb is root, the drop box can be copied"
+    else
+        echo "::warning::adb is not root (uid=$("$adb" -s "$serial" shell id -u 2>/dev/null | tr -d '\r')), the drop box files cannot be copied"
+    fi
 }
 
 services_up() {
@@ -96,9 +105,11 @@ wait_for_ready() {
     return 1
 }
 
-# capture_state <name>: dmesg, boot state and the drop box, which logcat does not carry. The drop
-# box holds the watchdog and tombstone reports for a dead system_server, and both the reboot and the
-# `-read-only` AVD take them away.
+# capture_state <name>: getprop, dmesg, boot state and the drop box, which logcat does not carry. The
+# drop box holds the watchdog and tombstone reports for a dead system_server, its service dies with
+# it, and both the reboot and the `-read-only` AVD take the files away, so this runs before the
+# reboot. This is the only guest-side collection that happens: the emulator is gone by the time the
+# workflow's diagnostics step runs.
 capture_state() {
     name="$1"
     mkdir -p "$diagnostics"
@@ -108,13 +119,22 @@ capture_state() {
         echo "=== boot_completed / ce_available ==="
         prop sys.boot_completed
         prop sys.user.0.ce_available
+        echo "=== getprop ==="
+        "$adb" -s "$serial" shell getprop
         echo "=== dmesg (tail) ==="
         "$adb" -s "$serial" shell dmesg | tail -n 500
     } > "$diagnostics/framework-$name.txt" 2>&1 || true
     rm -rf "$diagnostics/dropbox"
-    # Not `adb shell ... | tar`: adb shell allocates a pty, which mangles the binary stream.
-    "$adb" -s "$serial" pull /data/system/dropbox "$diagnostics/dropbox" >> "$diagnostics/dropbox-$name.txt" 2>&1 || true
-    "$adb" -s "$serial" shell dumpsys dropbox >> "$diagnostics/dropbox-$name.txt" 2>&1 || true
+    if adb_is_root; then
+        # Not `adb shell ... | tar`: adb shell allocates a pty, which mangles the binary stream.
+        "$adb" -s "$serial" pull /data/system/dropbox "$diagnostics/dropbox" > "$diagnostics/dropbox-$name.txt" 2>&1 || true
+    else
+        echo "adb is not root, the drop box files cannot be read" > "$diagnostics/dropbox-$name.txt"
+    fi
+    {
+        echo "=== dumpsys dropbox (only while system_server is alive) ==="
+        "$adb" -s "$serial" shell dumpsys dropbox --print
+    } >> "$diagnostics/dropbox-$name.txt" 2>&1 || true
 }
 
 report_crash_evidence() {
@@ -149,8 +169,8 @@ run_phase() {
     slug=$(printf '%s' "$label" | tr ' ' '-')
     shift
     wait_for_ready
-    ready=$?
-    if [ "$ready" -eq 0 ]; then
+    state=$?
+    if [ "$state" -eq 0 ]; then
         # Results of an earlier attempt must not be mistaken for this one's.
         rm -rf library/build/outputs/androidTest-results
         ./gradlew connectedCheck "$@"
@@ -163,7 +183,7 @@ run_phase() {
             return 0
         fi
         echo "::warning::$label: ran no test (the framework was not ready)"
-    elif [ "$ready" -eq 2 ]; then
+    elif [ "$state" -eq 2 ]; then
         echo "::warning::$label: the framework is gone while the guest is booted"
     else
         echo "::warning::$label: not ready (boot_completed=$(prop sys.boot_completed) ce_available=$(prop sys.user.0.ce_available))"

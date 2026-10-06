@@ -175,20 +175,11 @@ jobs:
           cp -r "${TMPDIR:-/tmp}"/android-* emulator-diagnostics/ 2>/dev/null || true
           cp /tmp/emulator-console.log emulator-diagnostics/ 2>/dev/null || true
           "$adb" devices -l > emulator-diagnostics/adb-devices.txt 2>&1 || true
-          state="$("$adb" -s emulator-5554 get-state 2>&1 || true)"
-          printf '%s\n' "$state" > emulator-diagnostics/guest-adb-state.txt
-          if [ "$state" = "device" ]; then
-            "$adb" -s emulator-5554 shell getprop > emulator-diagnostics/guest-getprop.txt 2>&1 || true
-            "$adb" -s emulator-5554 logcat -d -v threadtime > emulator-diagnostics/guest-logcat.txt 2>&1 || true
-            "$adb" -s emulator-5554 shell dmesg > emulator-diagnostics/guest-dmesg.txt 2>&1 || true
-            # Watchdog/tombstone reports for a dead system_server live in /data/system/dropbox, are
-            # only readable as root, and are gone after a reboot, so copy the files, not the service.
-            "$adb" -s emulator-5554 root > /dev/null 2>&1 || true
-            "$adb" -s emulator-5554 wait-for-device || true
-            rm -rf emulator-diagnostics/dropbox
-            "$adb" -s emulator-5554 pull /data/system/dropbox emulator-diagnostics/dropbox >> emulator-diagnostics/guest-dropbox-index.txt 2>&1 || true
-            "$adb" -s emulator-5554 shell dumpsys dropbox >> emulator-diagnostics/guest-dropbox-index.txt 2>&1 || true
-          fi
+          # The emulator is already gone by the time this step runs: the action terminates it at the
+          # end of its own step, so guest state cannot be collected here (this used to report
+          # "error: device offline"). .github/run-tests.sh captures logcat, getprop, dmesg and the
+          # drop box before each reboot instead.
+          printf '%s\n' "$("$adb" -s emulator-5554 get-state 2>&1 || true)" > emulator-diagnostics/guest-adb-state.txt
           ps -ef > emulator-diagnostics/host-processes.txt 2>&1 || true
           (command -v free > /dev/null && free -m || vm_stat) > emulator-diagnostics/host-memory.txt 2>&1 || true
           df -h > emulator-diagnostics/host-disk.txt 2>&1 || true
