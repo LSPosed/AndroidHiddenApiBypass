@@ -8,11 +8,12 @@
 # then dies while the tests run ("Failure calling service activity: Broken pipe (32)", followed by
 # "Can't find service: activity/package") and does not come back on its own. The next connectedCheck
 # then fails to install the test APK with "cmd: Can't find service: package" while Gradle still
-# reports success, and every further attempt fails the same way until the guest is rebooted.
+# reports success, and further attempts fail the same way until the guest is rebooted.
 #
-# So: require the framework to stay up, and reboot the guest and retry whenever a run did not
-# actually produce test results. A guest reboot keeps installed packages and their data, which is
-# what the second (-e load true) run reads its offset cache from.
+# So: require the framework to stay up, and reboot the guest once and retry whenever a run did not
+# actually produce test results. Before rebooting, dump logcat and dmesg, because the reboot clears
+# them and they are the only evidence of what killed the framework. A guest reboot keeps installed
+# packages and their data, which is what the second (-e load true) run reads its offset cache from.
 set -u
 
 cd "$(dirname "$0")/.."
@@ -21,7 +22,8 @@ sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 adb="$sdk/platform-tools/adb"
 serial=emulator-5554
 results=library/build/outputs/androidTest-results/connected/debug
-attempts=3
+diagnostics=emulator-diagnostics
+attempts=2
 
 framework_up() {
     "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
@@ -49,6 +51,30 @@ wait_for_framework() {
     return 1
 }
 
+# capture_diagnostics <name>; prints the file it wrote, which the workflow uploads with the
+# emulator diagnostics.
+capture_diagnostics() {
+    file="$diagnostics/framework-$1.log"
+    mkdir -p "$diagnostics"
+    {
+        echo "=== adb devices ==="
+        "$adb" devices -l
+        echo "=== sys.boot_completed ==="
+        "$adb" -s "$serial" shell getprop sys.boot_completed
+        echo "=== logcat (all buffers) ==="
+        "$adb" -s "$serial" logcat -d -b all -v threadtime
+        echo "=== dmesg (tail) ==="
+        "$adb" -s "$serial" shell dmesg | tail -n 500
+    } > "$file" 2>&1 || true
+    printf '%s\n' "$file"
+}
+
+report_crash_evidence() {
+    echo "::warning::what happened before the framework died ($1):"
+    grep -Ei 'FATAL EXCEPTION|beginning of crash|lowmemorykiller|lmkd|out of memory|SIGKILL|Watchdog|system_server|RescueParty' "$1" |
+        tail -n 25 || true
+}
+
 reboot_guest() {
     echo "::warning::rebooting $serial, the framework did not come back on its own"
     "$adb" -s "$serial" reboot >/dev/null 2>&1 || true
@@ -58,6 +84,7 @@ reboot_guest() {
 # run_tests <label> <gradle argument...>
 run_tests() {
     label="$1"
+    slug=$(printf '%s' "$label" | tr ' ' '-')
     shift
     attempt=0
     while [ "$attempt" -lt "$attempts" ]; do
@@ -82,6 +109,7 @@ run_tests() {
         else
             echo "::warning::$label: attempt $attempt: $serial framework services are not ready"
         fi
+        report_crash_evidence "$(capture_diagnostics "$slug-$attempt")"
         reboot_guest
     done
     echo "::error::$label: no test results after $attempts attempts"
