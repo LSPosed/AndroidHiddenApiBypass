@@ -4,16 +4,24 @@
 # The action executes every line of its `script` input as a separate `sh -c`, so the workflow only
 # calls this file and everything else lives here.
 #
-# The API 36/37 images do not survive a test run cleanly: the framework answers the boot checks,
-# then dies while the tests run ("Failure calling service activity: Broken pipe (32)", followed by
-# "Can't find service: activity/package") and does not come back on its own. The next connectedCheck
-# then fails to install the test APK with "cmd: Can't find service: package" while Gradle still
-# reports success, and further attempts fail the same way until the guest is rebooted.
+# The API 36/37 images do not survive a test run cleanly: system_server restarts on its own while
+# the tests run ("Failure calling service activity: Broken pipe (32)", then "Can't find service:
+# activity/package"), and while it is coming back the next connectedCheck fails to install the test
+# APK with "cmd: Can't find service: package" even though Gradle reports success. It does not
+# recover on its own, so the guest has to be rebooted.
 #
-# So: capture logcat from the start (a later `logcat -d` only sees what the ring buffers still
-# hold, and the reboot wipes them), wait for the framework to stay up, and reboot the guest once and
-# retry whenever a run did not actually produce test results. A guest reboot keeps installed
-# packages and their data, which is what the second (-e load true) run reads its offset cache from.
+# A reboot on a `-read-only` AVD starts from the base image: installed packages are gone and the
+# offset cache written by the first run is gone too, so the second (-e load true) run would fail
+# AAtestCachedDataLoaded. Both phases therefore live in one sequence that gets restarted after any
+# reboot, and no reboot happens between the run that writes the cache and the run that reads it.
+#
+# The wait also requires a completed boot and an unlocked user: running the tests while system_server
+# is still starting makes the install fail, and running them before user 0 is unlocked
+# (sys.user.0.ce_available) makes ContextImpl fail to create the app's CE cache dir, which silently
+# drops the offset cache again.
+#
+# logcat is streamed from the start, because a `logcat -d` at failure time only sees what the ring
+# buffers still hold and the reboot wipes them.
 set -u
 
 cd "$(dirname "$0")/.."
@@ -24,12 +32,20 @@ serial=emulator-5554
 results=library/build/outputs/androidTest-results/connected/debug
 diagnostics=emulator-diagnostics
 logcat_full="$diagnostics/logcat-full.log"
-attempts=2
+rounds=2
 logcat_pid=
 
-framework_up() {
+prop() {
+    "$adb" -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
+}
+
+services_up() {
     "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
         "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1
+}
+
+ready() {
+    [ "$(prop sys.boot_completed)" = "1" ] && services_up && [ "$(prop sys.user.0.ce_available)" = "true" ]
 }
 
 # Streams the log buffers into one file, so the reboot cannot take the evidence with it. The stats
@@ -53,20 +69,19 @@ stop_logcat() {
 
 trap 'stop_logcat' EXIT
 
-# 0: framework is up and stayed up for a moment, 1: not up (yet), 2: guest booted but the framework
-# is gone, which only a reboot fixes.
-wait_for_framework() {
-    booted=$("$adb" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-    if [ "$booted" = "1" ] && ! framework_up; then
+# 0: booted, services up and user 0 unlocked; 1: not ready yet; 2: booted but the framework is gone,
+# which only a reboot fixes.
+wait_for_ready() {
+    if [ "$(prop sys.boot_completed)" = "1" ] && ! services_up; then
         return 2
     fi
     i=0
-    while [ "$i" -lt 18 ]; do
-        if framework_up; then
-            # The services also have to survive the next few seconds, otherwise Gradle installs
-            # into the window where the framework is coming back up.
+    while [ "$i" -lt 24 ]; do
+        if ready; then
+            # Keep checking for a moment, so Gradle does not start installing into a framework that
+            # is about to go away again.
             sleep 10
-            framework_up && return 0
+            ready && return 0
         fi
         i=$((i + 1))
         sleep 5
@@ -81,8 +96,9 @@ capture_state() {
     {
         echo "=== adb devices ==="
         "$adb" devices -l
-        echo "=== sys.boot_completed ==="
-        "$adb" -s "$serial" shell getprop sys.boot_completed
+        echo "=== boot_completed / ce_available ==="
+        prop sys.boot_completed
+        prop sys.user.0.ce_available
         echo "=== dmesg (tail) ==="
         "$adb" -s "$serial" shell dmesg | tail -n 500
     } > "$file" 2>&1 || true
@@ -98,48 +114,54 @@ report_crash_evidence() {
 }
 
 reboot_guest() {
-    echo "::warning::rebooting $serial, the framework did not come back on its own"
+    echo "::warning::rebooting $serial"
     stop_logcat
     "$adb" -s "$serial" reboot >/dev/null 2>&1 || true
     "$adb" -s "$serial" wait-for-device >/dev/null 2>&1 || true
     start_logcat
 }
 
-# run_tests <label> <gradle argument...>
-run_tests() {
+# run_phase <label> <gradle argument...>: 0 when the tests ran and passed, 1 when the guest had to be
+# rebooted, and a hard exit when the tests ran and failed.
+run_phase() {
     label="$1"
     slug=$(printf '%s' "$label" | tr ' ' '-')
     shift
-    attempt=0
-    while [ "$attempt" -lt "$attempts" ]; do
-        attempt=$((attempt + 1))
-        wait_for_framework
-        ready=$?
-        if [ "$ready" -eq 0 ]; then
-            # Results of an earlier attempt must not be mistaken for this one's.
-            rm -rf library/build/outputs/androidTest-results
-            ./gradlew connectedCheck "$@"
-            status=$?
-            if ls "$results"/TEST-*.xml >/dev/null 2>&1; then
-                if [ "$status" -ne 0 ]; then
-                    echo "::error::$label: failing tests"
-                    exit 1
-                fi
-                return 0
+    wait_for_ready
+    ready=$?
+    if [ "$ready" -eq 0 ]; then
+        # Results of an earlier attempt must not be mistaken for this one's.
+        rm -rf library/build/outputs/androidTest-results
+        ./gradlew connectedCheck "$@"
+        status=$?
+        if ls "$results"/TEST-*.xml >/dev/null 2>&1; then
+            if [ "$status" -ne 0 ]; then
+                echo "::error::$label: failing tests"
+                exit 1
             fi
-            echo "::warning::$label: attempt $attempt ran no test (the framework was not ready)"
-        elif [ "$ready" -eq 2 ]; then
-            echo "::warning::$label: attempt $attempt: the framework is gone while the guest is booted"
-        else
-            echo "::warning::$label: attempt $attempt: $serial framework services are not ready"
+            return 0
         fi
-        report_crash_evidence "$(capture_state "$slug-$attempt")"
-        reboot_guest
-    done
-    echo "::error::$label: no test results after $attempts attempts"
-    exit 1
+        echo "::warning::$label: ran no test (the framework was not ready)"
+    elif [ "$ready" -eq 2 ]; then
+        echo "::warning::$label: the framework is gone while the guest is booted"
+    else
+        echo "::warning::$label: not ready (boot_completed=$(prop sys.boot_completed) ce_available=$(prop sys.user.0.ce_available))"
+    fi
+    report_crash_evidence "$(capture_state "$slug")"
+    reboot_guest
+    return 1
 }
 
 start_logcat
-run_tests "first run" -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
-run_tests "load run" -Pandroid.testInstrumentationRunnerArguments.load=true
+round=0
+while [ "$round" -lt "$rounds" ]; do
+    round=$((round + 1))
+    echo "=== round $round ==="
+    if run_phase "first run" -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true &&
+        run_phase "load run" -Pandroid.testInstrumentationRunnerArguments.load=true; then
+        exit 0
+    fi
+    echo "::warning::starting over, so the offset cache the load run reads is written after the reboot"
+done
+echo "::error::no test results after $rounds rounds"
+exit 1
