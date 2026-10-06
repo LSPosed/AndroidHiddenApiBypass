@@ -25,6 +25,8 @@ import androidx.annotation.RequiresApi;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
+import dalvik.system.PathClassLoader;
+
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -38,7 +40,9 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.WeakHashMap;
 
 import stub.dalvik.system.VMRuntime;
 import stub.sun.misc.Unsafe;
@@ -57,10 +61,12 @@ public final class HiddenApiBypass {
     private static final long artMethodBias;
     private static final long artFieldSize;
     private static final long artFieldBias;
-    private static final long artFieldAccessFlagsOffset;
+    private static final long fieldDeclaringClassOffset;
+    private static final long fieldTypeOffset;
     private static final boolean methodHandleSupported;
     private static final boolean instanceFieldHandleSupported;
     private static final boolean staticFieldHandleSupported;
+    private static final Map<Class<?>, Class<?>> fieldCloneCache = new WeakHashMap<>();
 
     static {
         try {
@@ -84,7 +90,9 @@ public final class HiddenApiBypass {
             artMethodBias = dataRT[1];
             artFieldSize = dataRT[2];
             artFieldBias = dataRT[3];
-            artFieldAccessFlagsOffset = dataRT[4];
+            var fieldData = readFieldOffsetDataClassLoader();
+            fieldDeclaringClassOffset = fieldData[0];
+            fieldTypeOffset = fieldData[1];
             methodHandleSupported = isMethodHandleSupported();
             instanceFieldHandleSupported = isFieldHandleSupported("i", "j");
             staticFieldHandleSupported = isFieldHandleSupported("s", "t");
@@ -151,6 +159,16 @@ public final class HiddenApiBypass {
         return data;
     }
 
+    private static long[] readFieldOffsetDataClassLoader() throws ReflectiveOperationException {
+        ClassLoader bootClassloader = new CoreOjClassLoader();
+        Class<?> fieldClass = bootClassloader.loadClass(Field.class.getName());
+
+        var data = new long[2];
+        data[0] = unsafe.objectFieldOffset(fieldClass.getDeclaredField("declaringClass"));
+        data[1] = unsafe.objectFieldOffset(fieldClass.getDeclaredField("type"));
+        return data;
+    }
+
     private static long[] readOffsetDataRT() throws ReflectiveOperationException {
         Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
         Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
@@ -170,16 +188,12 @@ public final class HiddenApiBypass {
 
         Field fI = Helper.NeverCall.class.getDeclaredField("i");
         Field fJ = Helper.NeverCall.class.getDeclaredField("j");
-        Field fS = Helper.NeverCall.class.getDeclaredField("s");
         fI.setAccessible(true);
         fJ.setAccessible(true);
-        fS.setAccessible(true);
         MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
         MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
-        MethodHandle mhS = MethodHandles.lookup().unreflectGetter(fS);
         long iAddr = unsafe.getLong(mhI, artOffset);
         long jAddr = unsafe.getLong(mhJ, artOffset);
-        long sAddr = unsafe.getLong(mhS, artOffset);
         long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
         var artFieldSize = jAddr - iAddr;
         if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
@@ -187,22 +201,12 @@ public final class HiddenApiBypass {
                 Long.toString(jAddr, 16) + ", " +
                 Long.toString(iFields, 16));
         var artFieldBias = iAddr - iFields;
-        var artFieldAccessFlagsOffset = -1L;
-        for (long offset = 0; offset < artFieldSize; offset += 4) {
-            if ((unsafe.getInt(iAddr + offset) & 0xffff) == fI.getModifiers()
-                    && (unsafe.getInt(sAddr + offset) & 0xffff) == fS.getModifiers()) {
-                artFieldAccessFlagsOffset = offset;
-                break;
-            }
-        }
-        if (artFieldAccessFlagsOffset < 0) throw new NoSuchFieldException("ArtField.access_flags_");
 
-        long[] data = new long[5];
+        long[] data = new long[4];
         data[0] = artMethodSize;
         data[1] = artMethodBias;
         data[2] = artFieldSize;
         data[3] = artFieldBias;
-        data[4] = artFieldAccessFlagsOffset;
         return data;
     }
 
@@ -488,19 +492,10 @@ public final class HiddenApiBypass {
 
     @Nullable
     private static List<Field> getFieldsFromArt(@NonNull Class<?> clazz, boolean wantStatic) {
-        long classFieldsOffset = wantStatic ? sFieldOffset : iFieldOffset;
-        FieldHandleBypass resolver;
-        try {
-            resolver = FieldHandleBypass.get(unsafe, artOffset, classFieldsOffset, iFieldOffset,
-                    artFieldSize, artFieldBias, artFieldAccessFlagsOffset);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to initialize field handle resolver", e);
-            return null;
-        }
         List<Field> fields;
         try {
-            fields = resolver.reflect(clazz);
-        } catch (IOException | ReflectiveOperationException | RuntimeException | LinkageError e) {
+            fields = getFieldsFromClassLoader(clazz, wantStatic);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields", e);
             return null;
         }
@@ -517,6 +512,110 @@ public final class HiddenApiBypass {
             if (Modifier.isStatic(member.getModifiers()) == wantStatic) list.add(member);
         }
         return list;
+    }
+
+    @NonNull
+    private static List<Field> getFieldsFromClassLoader(@NonNull Class<?> clazz, boolean wantStatic)
+            throws ReflectiveOperationException {
+        long fields = unsafe.getLong(clazz, wantStatic ? sFieldOffset : iFieldOffset);
+        if (fields == 0 || unsafe.getInt(fields) == 0) return List.of();
+
+        Class<?> clonedClass = getFieldCloneClass(clazz);
+        Field[] clonedFields = clonedClass.getDeclaredFields();
+        List<Field> list = new ArrayList<>(clonedFields.length);
+        for (Field field : clonedFields) {
+            unsafe.putObject(field, fieldDeclaringClassOffset, clazz);
+            if (unsafe.getObject(field, fieldTypeOffset) == clonedClass) {
+                unsafe.putObject(field, fieldTypeOffset, clazz);
+            }
+            list.add(field);
+        }
+        return list;
+    }
+
+    private static Class<?> getFieldCloneClass(Class<?> clazz) throws ClassNotFoundException {
+        synchronized (fieldCloneCache) {
+            Class<?> cached = fieldCloneCache.get(clazz);
+            if (cached != null) return cached;
+
+            ClassLoader parent = clazz.getClassLoader();
+            if (parent == null) parent = HiddenApiBypass.class.getClassLoader();
+            for (String path : dexPaths(clazz)) {
+                var loader = new FieldCloneClassLoader(path, parent, clazz.getName());
+                Class<?> cloned = Class.forName(clazz.getName(), false, loader);
+                if (cloned != clazz) {
+                    fieldCloneCache.put(clazz, cloned);
+                    return cloned;
+                }
+            }
+        }
+        throw new ClassNotFoundException(clazz.getName());
+    }
+
+    private static List<String> dexPaths(Class<?> clazz) {
+        ArrayList<String> paths = new ArrayList<>();
+        ClassLoader classLoader = clazz.getClassLoader();
+        while (classLoader != null) {
+            addClassLoaderPaths(paths, classLoader.toString());
+            classLoader = classLoader.getParent();
+        }
+        addDexPaths(paths, System.getProperty("java.class.path", ""));
+        addDexPaths(paths, System.getProperty("java.boot.class.path", ""));
+        addDexPaths(paths, System.getenv("BOOTCLASSPATH"));
+        addDexPaths(paths, System.getenv("DEX2OATBOOTCLASSPATH"));
+        return paths;
+    }
+
+    private static void addDexPaths(ArrayList<String> paths, String value) {
+        if (value == null || value.isEmpty()) return;
+        for (String path : value.split(":")) {
+            addDexPath(paths, path);
+        }
+    }
+
+    private static void addClassLoaderPaths(ArrayList<String> paths, String value) {
+        int start = 0;
+        while (true) {
+            start = value.indexOf('"', start);
+            if (start < 0) return;
+            start++;
+            int end = value.indexOf('"', start);
+            if (end < 0) return;
+            addDexPath(paths, value.substring(start, end));
+            start = end + 1;
+        }
+    }
+
+    private static void addDexPath(ArrayList<String> paths, String path) {
+        if ((path.endsWith(".apk") || path.endsWith(".jar") || path.endsWith(".dex"))
+                && !paths.contains(path)) {
+            paths.add(path);
+        }
+    }
+
+    private static final class FieldCloneClassLoader extends PathClassLoader {
+        private final String targetClassName;
+
+        private FieldCloneClassLoader(String dexPath, ClassLoader parent, String targetClassName) {
+            super(dexPath, parent);
+            this.targetClassName = targetClassName;
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            synchronized (this) {
+                Class<?> clazz = findLoadedClass(name);
+                if (clazz == null && targetClassName.equals(name)) {
+                    try {
+                        clazz = findClass(name);
+                    } catch (ClassNotFoundException ignored) {
+                    }
+                }
+                if (clazz == null) clazz = super.loadClass(name, false);
+                if (resolve) resolveClass(clazz);
+                return clazz;
+            }
+        }
     }
 
     /**
