@@ -38,11 +38,12 @@ final class FieldHandleBypass {
     private static final int FIELD_ACCESS_PUBLIC = 0x0001;
     private static final int FIELD_ACCESS_STATIC = 0x0008;
 
-    private static volatile FieldHandleBypass instance;
+    private static final Map<String, FieldHandleBypass> instances = new HashMap<>();
 
     private final Unsafe unsafe;
     private final long artOffset;
     private final long classFieldsOffset;
+    private final long helperFieldsOffset;
     private final long artFieldSize;
     private final long artFieldBias;
     private final long artFieldAccessFlagsOffset;
@@ -59,29 +60,32 @@ final class FieldHandleBypass {
     private final int helperPublicFlags;
 
     static FieldHandleBypass get(Unsafe unsafe, long artOffset, long classFieldsOffset,
+                                 long helperFieldsOffset,
                                  long artFieldSize, long artFieldBias,
                                  long artFieldAccessFlagsOffset)
             throws ReflectiveOperationException {
-        FieldHandleBypass resolver = instance;
-        if (resolver != null) return resolver;
+        String key = classFieldsOffset + ":" + helperFieldsOffset;
         synchronized (FieldHandleBypass.class) {
-            resolver = instance;
+            FieldHandleBypass resolver = instances.get(key);
             if (resolver == null) {
                 resolver = new FieldHandleBypass(unsafe, artOffset, classFieldsOffset,
+                        helperFieldsOffset,
                         artFieldSize, artFieldBias, artFieldAccessFlagsOffset);
-                instance = resolver;
+                instances.put(key, resolver);
             }
             return resolver;
         }
     }
 
     private FieldHandleBypass(Unsafe unsafe, long artOffset, long classFieldsOffset,
+                              long helperFieldsOffset,
                               long artFieldSize, long artFieldBias,
                               long artFieldAccessFlagsOffset)
             throws ReflectiveOperationException {
         this.unsafe = unsafe;
         this.artOffset = artOffset;
         this.classFieldsOffset = classFieldsOffset;
+        this.helperFieldsOffset = helperFieldsOffset;
         this.artFieldSize = artFieldSize;
         this.artFieldBias = artFieldBias;
         this.artFieldAccessFlagsOffset = artFieldAccessFlagsOffset;
@@ -129,7 +133,7 @@ final class FieldHandleBypass {
         int numFields = unsafe.getInt(fields);
         if (numFields == 0) return List.of();
 
-        long helperFields = unsafe.getLong(helperClass, classFieldsOffset);
+        long helperFields = unsafe.getLong(helperClass, helperFieldsOffset);
         if (helperFields == 0 || unsafe.getInt(helperFields) == 0) {
             throw new NoSuchFieldException("Helper.FieldBridge.fields");
         }

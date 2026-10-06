@@ -48,6 +48,7 @@ jobs:
     name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
     needs: build
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.api-level == 'CANARY' }}
     strategy:
       fail-fast: false
       matrix:
@@ -147,8 +148,8 @@ jobs:
           target: ${{ matrix.target }}
           channel: canary
           script: |
-            ./gradlew connectedCheck -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
-            ./gradlew connectedCheck -Pandroid.testInstrumentationRunnerArguments.load=true
+            ./gradlew --no-configuration-cache connectedCheck -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
+            ./gradlew --no-configuration-cache connectedCheck -Pandroid.testInstrumentationRunnerArguments.load=true
           force-avd-creation: false
           emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
           pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}

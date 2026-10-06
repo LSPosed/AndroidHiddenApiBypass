@@ -488,11 +488,11 @@ public final class HiddenApiBypass {
 
     @Nullable
     private static List<Field> getFieldsFromArt(@NonNull Class<?> clazz, boolean wantStatic) {
-        if (iFieldOffset != sFieldOffset) return null;
+        long classFieldsOffset = wantStatic ? sFieldOffset : iFieldOffset;
         FieldHandleBypass resolver;
         try {
-            resolver = FieldHandleBypass.get(unsafe, artOffset, iFieldOffset, artFieldSize,
-                    artFieldBias, artFieldAccessFlagsOffset);
+            resolver = FieldHandleBypass.get(unsafe, artOffset, classFieldsOffset, iFieldOffset,
+                    artFieldSize, artFieldBias, artFieldAccessFlagsOffset);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Failed to initialize field handle resolver", e);
             return null;
