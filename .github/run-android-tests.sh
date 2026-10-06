@@ -26,14 +26,30 @@ wait_for_boot() {
   until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
     sleep 1
   done
+  wait_for_package_service
+}
+
+wait_for_package_service() {
   until adb shell cmd package list packages android >/dev/null 2>&1; do
     sleep 1
   done
+}
+
+clear_test_package() {
+  for attempt in {1..30}; do
+    if adb shell pm clear "$test_package"; then
+      return 0
+    fi
+    sleep 1
+    wait_for_package_service
+  done
+  return 1
 }
 
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
 adb uninstall "$test_package" || true
 adb install --no-streaming -r -t "$test_apk"
-adb shell pm clear "$test_package"
+wait_for_package_service
+clear_test_package
 run_instrumentation cold
