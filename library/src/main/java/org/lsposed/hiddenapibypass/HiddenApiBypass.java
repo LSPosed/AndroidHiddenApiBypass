@@ -25,9 +25,6 @@ import androidx.annotation.RequiresApi;
 
 import org.lsposed.hiddenapibypass.library.BuildConfig;
 
-import dalvik.system.PathClassLoader;
-
-import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
@@ -40,9 +37,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.WeakHashMap;
 
 import stub.dalvik.system.VMRuntime;
 import stub.sun.misc.Unsafe;
@@ -61,177 +56,74 @@ public final class HiddenApiBypass {
     private static final long artMethodBias;
     private static final long artFieldSize;
     private static final long artFieldBias;
+    private static final ClassLoader bootClassloader;
     private static final long fieldDeclaringClassOffset;
     private static final long fieldTypeOffset;
-    private static final boolean methodHandleSupported;
     private static final boolean instanceFieldHandleSupported;
     private static final boolean staticFieldHandleSupported;
-    private static final Map<Class<?>, Class<?>> fieldCloneCache = new WeakHashMap<>();
 
     static {
         try {
             //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
-            var data = Helper.getCachedOffsetData();
-            if (data == null) {
-                data = readOffsetDataIO();
-                Helper.setCachedOffsetData(data);
-            } else if (BuildConfig.DEBUG) {
-                Log.d(TAG, "Using cached offset data");
+            assert unsafe != null;
+            bootClassloader = new CoreOjClassLoader();
+            Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
+            Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
+            Class<?> classClass = bootClassloader.loadClass(Class.class.getName());
+            Class<?> fieldClass = bootClassloader.loadClass(Field.class.getName());
+            methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
+            classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
+            artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
+            fieldDeclaringClassOffset = unsafe.objectFieldOffset(fieldClass.getDeclaredField("declaringClass"));
+            fieldTypeOffset = unsafe.objectFieldOffset(fieldClass.getDeclaredField("type"));
+            long iField;
+            long sField;
+            try {
+                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+                sField = iField;
+            } catch (NoSuchFieldException e) {
+                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+                sField = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
             }
-            methodOffset = data[0];
-            classOffset = data[1];
-            artOffset = data[2];
-            methodsOffset = data[3];
-            iFieldOffset = data[4];
-            sFieldOffset = data[5];
-            var dataRT = readOffsetDataRT();
-            artMethodSize = dataRT[0];
-            artMethodBias = dataRT[1];
-            artFieldSize = dataRT[2];
-            artFieldBias = dataRT[3];
-            var fieldData = readFieldOffsetDataClassLoader();
-            fieldDeclaringClassOffset = fieldData[0];
-            fieldTypeOffset = fieldData[1];
-            methodHandleSupported = isMethodHandleSupported();
+            iFieldOffset = iField;
+            sFieldOffset = sField;
+            methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
+            Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
+            Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
+            mA.setAccessible(true);
+            mB.setAccessible(true);
+            MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
+            MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
+            long aAddr = unsafe.getLong(mhA, artOffset);
+            long bAddr = unsafe.getLong(mhB, artOffset);
+            long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
+            artMethodSize = bAddr - aAddr;
+            if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
+                    Long.toString(aAddr, 16) + ", " +
+                    Long.toString(bAddr, 16) + ", " +
+                    Long.toString(aMethods, 16));
+            artMethodBias = aAddr - aMethods - artMethodSize;
+            Field fI = Helper.NeverCall.class.getDeclaredField("i");
+            Field fJ = Helper.NeverCall.class.getDeclaredField("j");
+            fI.setAccessible(true);
+            fJ.setAccessible(true);
+            MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
+            MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
+            long iAddr = unsafe.getLong(mhI, artOffset);
+            long jAddr = unsafe.getLong(mhJ, artOffset);
+            long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
+            artFieldSize = jAddr - iAddr;
+            if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
+                    Long.toString(iAddr, 16) + ", " +
+                    Long.toString(jAddr, 16) + ", " +
+                    Long.toString(iFields, 16));
+            artFieldBias = iAddr - iFields;
             instanceFieldHandleSupported = isFieldHandleSupported("i", "j");
             staticFieldHandleSupported = isFieldHandleSupported("s", "t");
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "MethodHandle support: method=" + methodHandleSupported
-                        + ", instanceField=" + instanceFieldHandleSupported
-                        + ", staticField=" + staticFieldHandleSupported);
-            }
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
-        }
-    }
-
-    private static long[] readOffsetDataIO() throws ReflectiveOperationException {
-        try {
-            return readOffsetDataDex();
-        } catch (IOException | ReflectiveOperationException | RuntimeException e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to read offset data from dex", e);
-        }
-        return readOffsetDataClassLoader();
-    }
-
-    private static long[] readOffsetDataDex() throws IOException, ReflectiveOperationException {
-        var scanner = new DexFieldLayout();
-        scanner.scanPath(CoreOjClassLoader.getCoreOjPath());
-        var executable = scanner.layoutOf(DexFieldLayout.EXECUTABLE);
-        var methodHandle = scanner.layoutOf(DexFieldLayout.METHOD_HANDLE);
-        var classClass = scanner.layoutOf(DexFieldLayout.CLASS);
-
-        var data = new long[6];
-        data[0] = executable.offsetOf("artMethod");
-        data[1] = executable.offsetOf("declaringClass");
-        data[2] = methodHandle.offsetOf("artFieldOrMethod");
-        data[3] = classClass.offsetOf("methods");
-        if (classClass.hasField("fields")) {
-            data[4] = classClass.offsetOf("fields");
-            data[5] = data[4];
-        } else {
-            data[4] = classClass.offsetOf("iFields");
-            data[5] = classClass.offsetOf("sFields");
-        }
-        return data;
-    }
-
-    private static long[] readOffsetDataClassLoader() throws ReflectiveOperationException {
-        ClassLoader bootClassloader = new CoreOjClassLoader();
-        Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
-        Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
-        Class<?> classClass = bootClassloader.loadClass(Class.class.getName());
-
-        var data = new long[6];
-        data[0] = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
-        data[1] = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
-        data[2] = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
-        data[3] = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
-        try {
-            data[4] = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
-            data[5] = data[4];
-        } catch (NoSuchFieldException e) {
-            data[4] = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
-            data[5] = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
-        }
-        return data;
-    }
-
-    private static long[] readFieldOffsetDataClassLoader() throws ReflectiveOperationException {
-        ClassLoader bootClassloader = new CoreOjClassLoader();
-        Class<?> fieldClass = bootClassloader.loadClass(Field.class.getName());
-
-        var data = new long[2];
-        data[0] = unsafe.objectFieldOffset(fieldClass.getDeclaredField("declaringClass"));
-        data[1] = unsafe.objectFieldOffset(fieldClass.getDeclaredField("type"));
-        return data;
-    }
-
-    private static long[] readOffsetDataRT() throws ReflectiveOperationException {
-        Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
-        Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
-        mA.setAccessible(true);
-        mB.setAccessible(true);
-        MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
-        MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
-        long aAddr = unsafe.getLong(mhA, artOffset);
-        long bAddr = unsafe.getLong(mhB, artOffset);
-        long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
-        var artMethodSize = bAddr - aAddr;
-        if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
-                Long.toString(aAddr, 16) + ", " +
-                Long.toString(bAddr, 16) + ", " +
-                Long.toString(aMethods, 16));
-        var artMethodBias = aAddr - aMethods - artMethodSize;
-
-        Field fI = Helper.NeverCall.class.getDeclaredField("i");
-        Field fJ = Helper.NeverCall.class.getDeclaredField("j");
-        fI.setAccessible(true);
-        fJ.setAccessible(true);
-        MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
-        MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
-        long iAddr = unsafe.getLong(mhI, artOffset);
-        long jAddr = unsafe.getLong(mhJ, artOffset);
-        long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
-        var artFieldSize = jAddr - iAddr;
-        if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
-                Long.toString(iAddr, 16) + ", " +
-                Long.toString(jAddr, 16) + ", " +
-                Long.toString(iFields, 16));
-        var artFieldBias = iAddr - iFields;
-
-        long[] data = new long[4];
-        data[0] = artMethodSize;
-        data[1] = artMethodBias;
-        data[2] = artFieldSize;
-        data[3] = artFieldBias;
-        return data;
-    }
-
-    private static boolean isMethodHandleSupported() {
-        try {
-            Method source = Helper.NeverCall.class.getDeclaredMethod("a");
-            Method target = Helper.NeverCall.class.getDeclaredMethod("b");
-            source.setAccessible(true);
-            target.setAccessible(true);
-            MethodHandle handle = MethodHandles.lookup().unreflect(source);
-            MethodHandle targetHandle = MethodHandles.lookup().unreflect(target);
-            long sourceArtMethod = unsafe.getLong(handle, artOffset);
-            long targetArtMethod = unsafe.getLong(targetHandle, artOffset);
-            try {
-                unsafe.putLong(handle, artOffset, targetArtMethod);
-                Executable reflected = MethodHandles.reflectAs(Executable.class, handle);
-                return reflected instanceof Method
-                        && reflected.getDeclaringClass() == Helper.NeverCall.class
-                        && "b".equals(reflected.getName());
-            } finally {
-                unsafe.putLong(handle, artOffset, sourceArtMethod);
-            }
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "MethodHandle method check failed", e);
-            return false;
         }
     }
 
@@ -282,11 +174,10 @@ public final class HiddenApiBypass {
                     "(" + Arrays.stream(stub.getParameterTypes()).map(Type::getTypeName).collect(Collectors.joining()) + ")");
             if ("<init>".equals(stub.getName())) {
                 unsafe.putLong(ctor, methodOffset, method);
+                unsafe.putObject(ctor, classOffset, clazz);
                 Class<?>[] params = ctor.getParameterTypes();
-                if (Helper.checkArgsForInvokeMethod(params, initargs)) {
-                    unsafe.putObject(ctor, classOffset, clazz);
+                if (Helper.checkArgsForInvokeMethod(params, initargs))
                     return ctor.newInstance(initargs);
-                }
             }
         }
         throw new NoSuchMethodException("Cannot find matching constructor");
@@ -303,6 +194,9 @@ public final class HiddenApiBypass {
      * @see Method#invoke(Object, Object...)
      */
     public static Object invoke(@NonNull Class<?> clazz, @Nullable Object thiz, @NonNull String methodName, Object... args) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        if (thiz != null && !clazz.isInstance(thiz)) {
+            throw new IllegalArgumentException("this object is not an instance of the given class");
+        }
         Method stub = Helper.InvokeStub.class.getDeclaredMethod("invoke", Object[].class);
         stub.setAccessible(true);
         long methods = unsafe.getLong(clazz, methodsOffset);
@@ -332,38 +226,6 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Executable> getDeclaredMethods(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
-        if (methodHandleSupported) {
-            try {
-                return getDeclaredMethodsFromMethodHandle(clazz);
-            } catch (RuntimeException | LinkageError e) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize methods with MethodHandle", e);
-            }
-        }
-        List<Executable> methods = getDeclaredMethodsFromArt(clazz);
-        if (methods != null) return methods;
-        return List.of();
-    }
-
-    @Nullable
-    private static List<Executable> getDeclaredMethodsFromArt(@NonNull Class<?> clazz) {
-        MethodHandleBypass resolver;
-        try {
-            resolver = MethodHandleBypass.get(unsafe, artOffset, methodsOffset, artMethodSize,
-                    artMethodBias, methodOffset);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to initialize method handle resolver", e);
-            return null;
-        }
-        try {
-            return resolver.reflect(clazz);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize methods", e);
-            return null;
-        }
-    }
-
-    @NonNull
-    private static List<Executable> getDeclaredMethodsFromMethodHandle(@NonNull Class<?> clazz) {
         MethodHandle mh;
         try {
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
@@ -451,16 +313,8 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getInstanceFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
-        if (instanceFieldHandleSupported) {
-            try {
-                return getFieldsFromMethodHandle(clazz, false);
-            } catch (RuntimeException | LinkageError e) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with MethodHandle", e);
-            }
-        }
-        List<Field> fields = getFieldsFromArt(clazz, false);
-        if (fields != null) return fields;
-        return List.of();
+        if (!instanceFieldHandleSupported) return getFieldsFromClassLoader(clazz, false);
+        return getFieldsFromMethodHandle(clazz, false);
     }
 
     @NonNull
@@ -470,7 +324,7 @@ public final class HiddenApiBypass {
             Field stub = Helper.NeverCall.class.getDeclaredField(wantStatic ? "s" : "i");
             stub.setAccessible(true);
             mh = MethodHandles.lookup().unreflectGetter(stub);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
+        } catch (IllegalAccessException | NoSuchFieldException e) {
             return List.of();
         }
         long fields = unsafe.getLong(clazz, wantStatic ? sFieldOffset : iFieldOffset);
@@ -482,139 +336,34 @@ public final class HiddenApiBypass {
             long field = fields + i * artFieldSize + artFieldBias;
             unsafe.putLong(mh, artOffset, field);
             Field member = MethodHandles.reflectAs(Field.class, mh);
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.DEBUG)
                 Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
-            }
-            if (Modifier.isStatic(member.getModifiers()) == wantStatic) list.add(member);
-        }
-        return list;
-    }
-
-    @Nullable
-    private static List<Field> getFieldsFromArt(@NonNull Class<?> clazz, boolean wantStatic) {
-        List<Field> fields;
-        try {
-            fields = getFieldsFromClassLoader(clazz, wantStatic);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields", e);
-            return null;
-        }
-        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + fields.size() + " fields");
-        List<Field> list = new ArrayList<>(fields.size());
-        for (Field member : fields) {
-            if (member.getDeclaringClass() != clazz) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "Materialized field from wrong class: " + member);
-                return null;
-            }
-            if (BuildConfig.DEBUG) {
-                Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
-            }
-            if (Modifier.isStatic(member.getModifiers()) == wantStatic) list.add(member);
+            if (Modifier.isStatic(member.getModifiers()) == wantStatic)
+                list.add(member);
         }
         return list;
     }
 
     @NonNull
-    private static List<Field> getFieldsFromClassLoader(@NonNull Class<?> clazz, boolean wantStatic)
-            throws ReflectiveOperationException {
-        long fields = unsafe.getLong(clazz, wantStatic ? sFieldOffset : iFieldOffset);
-        if (fields == 0 || unsafe.getInt(fields) == 0) return List.of();
-
-        Class<?> clonedClass = getFieldCloneClass(clazz);
-        Field[] clonedFields = clonedClass.getDeclaredFields();
-        List<Field> list = new ArrayList<>(clonedFields.length);
-        for (Field field : clonedFields) {
-            unsafe.putObject(field, fieldDeclaringClassOffset, clazz);
-            if (unsafe.getObject(field, fieldTypeOffset) == clonedClass) {
-                unsafe.putObject(field, fieldTypeOffset, clazz);
-            }
-            list.add(field);
-        }
-        return list;
-    }
-
-    private static Class<?> getFieldCloneClass(Class<?> clazz) throws ClassNotFoundException {
-        synchronized (fieldCloneCache) {
-            Class<?> cached = fieldCloneCache.get(clazz);
-            if (cached != null) return cached;
-
-            ClassLoader parent = clazz.getClassLoader();
-            if (parent == null) parent = HiddenApiBypass.class.getClassLoader();
-            for (String path : dexPaths(clazz)) {
-                var loader = new FieldCloneClassLoader(path, parent, clazz.getName());
-                Class<?> cloned = Class.forName(clazz.getName(), false, loader);
-                if (cloned != clazz) {
-                    fieldCloneCache.put(clazz, cloned);
-                    return cloned;
+    private static List<Field> getFieldsFromClassLoader(@NonNull Class<?> clazz, boolean wantStatic) {
+        try {
+            Class<?> clonedClass = bootClassloader.loadClass(clazz.getName());
+            if (clonedClass == clazz) return List.of();
+            Field[] fields = clonedClass.getDeclaredFields();
+            List<Field> list = new ArrayList<>(fields.length);
+            for (Field field : fields) {
+                unsafe.putObject(field, fieldDeclaringClassOffset, clazz);
+                if (unsafe.getObject(field, fieldTypeOffset) == clonedClass) {
+                    unsafe.putObject(field, fieldTypeOffset, clazz);
+                }
+                if (Modifier.isStatic(field.getModifiers()) == wantStatic) {
+                    list.add(field);
                 }
             }
-        }
-        throw new ClassNotFoundException(clazz.getName());
-    }
-
-    private static List<String> dexPaths(Class<?> clazz) {
-        ArrayList<String> paths = new ArrayList<>();
-        ClassLoader classLoader = clazz.getClassLoader();
-        while (classLoader != null) {
-            addClassLoaderPaths(paths, classLoader.toString());
-            classLoader = classLoader.getParent();
-        }
-        addDexPaths(paths, System.getProperty("java.class.path", ""));
-        addDexPaths(paths, System.getProperty("java.boot.class.path", ""));
-        addDexPaths(paths, System.getenv("BOOTCLASSPATH"));
-        addDexPaths(paths, System.getenv("DEX2OATBOOTCLASSPATH"));
-        return paths;
-    }
-
-    private static void addDexPaths(ArrayList<String> paths, String value) {
-        if (value == null || value.isEmpty()) return;
-        for (String path : value.split(":")) {
-            addDexPath(paths, path);
-        }
-    }
-
-    private static void addClassLoaderPaths(ArrayList<String> paths, String value) {
-        int start = 0;
-        while (true) {
-            start = value.indexOf('"', start);
-            if (start < 0) return;
-            start++;
-            int end = value.indexOf('"', start);
-            if (end < 0) return;
-            addDexPath(paths, value.substring(start, end));
-            start = end + 1;
-        }
-    }
-
-    private static void addDexPath(ArrayList<String> paths, String path) {
-        if ((path.endsWith(".apk") || path.endsWith(".jar") || path.endsWith(".dex"))
-                && !paths.contains(path)) {
-            paths.add(path);
-        }
-    }
-
-    private static final class FieldCloneClassLoader extends PathClassLoader {
-        private final String targetClassName;
-
-        private FieldCloneClassLoader(String dexPath, ClassLoader parent, String targetClassName) {
-            super(dexPath, parent);
-            this.targetClassName = targetClassName;
-        }
-
-        @Override
-        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            synchronized (this) {
-                Class<?> clazz = findLoadedClass(name);
-                if (clazz == null && targetClassName.equals(name)) {
-                    try {
-                        clazz = findClass(name);
-                    } catch (ClassNotFoundException ignored) {
-                    }
-                }
-                if (clazz == null) clazz = super.loadClass(name, false);
-                if (resolve) resolveClass(clazz);
-                return clazz;
-            }
+            return list;
+        } catch (ClassNotFoundException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with classloader", e);
+            return List.of();
         }
     }
 
@@ -627,16 +376,8 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
-        if (staticFieldHandleSupported) {
-            try {
-                return getFieldsFromMethodHandle(clazz, true);
-            } catch (RuntimeException | LinkageError e) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with MethodHandle", e);
-            }
-        }
-        List<Field> fields = getFieldsFromArt(clazz, true);
-        if (fields != null) return fields;
-        return List.of();
+        if (!staticFieldHandleSupported) return getFieldsFromClassLoader(clazz, true);
+        return getFieldsFromMethodHandle(clazz, true);
     }
 
     /**
@@ -644,7 +385,7 @@ public final class HiddenApiBypass {
      *
      * @param signaturePrefixes A list of class signature prefixes. Each item in the list is a prefix match on the type
      *                          signature of a blacklisted API. All matching APIs are treated as if they were on
-     *                          the whitelist: access permitted, and no logging.
+     *                          the whitelist: access permitted, and no logging..
      * @return whether the operation is successful
      */
     public static boolean setHiddenApiExemptions(@NonNull String... signaturePrefixes) {
@@ -663,13 +404,9 @@ public final class HiddenApiBypass {
      *
      * @param signaturePrefixes A list of class signature prefixes. Each item in the list is a prefix match on the type
      *                          signature of a blacklisted API. All matching APIs are treated as if they were on
-     *                          the whitelist: access permitted, and no logging.
+     *                          the whitelist: access permitted, and no logging..
      * @return whether the operation is successful
-     *
-     * @deprecated {@link VMRuntime#setHiddenApiExemptions(String[])} cannot be called more than once.
-     * In a future Android release that will either be no-op or throw an exception.
      */
-    @Deprecated
     public static boolean addHiddenApiExemptions(String... signaturePrefixes) {
         Helper.signaturePrefixes.addAll(Arrays.asList(signaturePrefixes));
         String[] strings = new String[Helper.signaturePrefixes.size()];
@@ -683,11 +420,7 @@ public final class HiddenApiBypass {
      * running this method will not restore the restriction on it.
      *
      * @return whether the operation is successful
-     *
-     * @deprecated {@link VMRuntime#setHiddenApiExemptions(String[])} cannot be called more than once.
-     * In a future Android release that will either be no-op or throw an exception.
      */
-    @Deprecated
     public static boolean clearHiddenApiExemptions() {
         Helper.signaturePrefixes.clear();
         return setHiddenApiExemptions();
