@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import android.content.pm.ApplicationInfo;
 import android.graphics.drawable.ClipDrawable;
@@ -33,12 +34,48 @@ import java.util.Optional;
 public class HiddenApiBypassTest {
 
     private final Class<?> runtime = Class.forName("dalvik.system.VMRuntime");
+    // Sampled from AOSP android17-release prebuilts/runtime/appcompat/hiddenapi-flags.csv.
     private static final String[][] HIDDEN_API_FIELDS = {
             {"android.content.pm.ApplicationInfo", "longVersionCode"},
             {"android.content.pm.ApplicationInfo", "HIDDEN_API_ENFORCEMENT_DEFAULT"},
+            {"android.content.pm.ApplicationInfo", "privateFlags"},
+            {"android.content.pm.ApplicationInfo", "primaryCpuAbi"},
+            {"android.content.pm.ApplicationInfo", "scanSourceDir"},
+            {"android.app.ActivityOptions", "mAnimationType"},
+            {"android.app.ActivityOptions", "mLaunchBounds"},
+            {"android.app.ActivityOptions", "mPackageName"},
+            {"android.app.ActivityOptions", "mHeight"},
+            {"android.app.ActivityOptions", "mWidth"},
+            {"android.app.ActivityThread", "sCurrentActivityThread"},
+            {"android.app.ActivityThread", "mInitialApplication"},
+            {"android.app.ActivityThread", "mBoundApplication"},
+            {"android.app.ActivityThread", "mH"},
+            {"android.app.ActivityThread", "mPackages"},
             {"android.os.Message", "flags"},
+            {"android.os.Message", "next"},
+            {"android.os.Message", "sPoolSize"},
             {"android.os.UserHandle", "PER_USER_RANGE"},
             {"android.os.UserHandle", "mHandle"},
+            {"android.os.UserHandle", "MU_ENABLED"},
+            {"android.view.View", "mPrivateFlags"},
+            {"android.view.View", "mViewFlags"},
+            {"android.view.View", "mLeft"},
+            {"android.view.View", "mRight"},
+            {"android.view.View", "mTop"},
+            {"android.view.View", "mBottom"},
+            {"android.view.View", "mAttachInfo"},
+            {"android.widget.TextView", "mText"},
+            {"android.widget.TextView", "mLayout"},
+            {"android.widget.TextView", "mEditor"},
+            {"android.widget.TextView", "mTextColor"},
+            {"android.widget.TextView", "mCurTextColor"},
+            {"android.net.NetworkCapabilities", "mNetworkCapabilities"},
+            {"android.net.NetworkCapabilities", "mTransportTypes"},
+            {"android.net.NetworkCapabilities", "mLinkUpBandwidthKbps"},
+            {"android.net.NetworkCapabilities", "mLinkDownBandwidthKbps"},
+            {"android.telephony.TelephonyManager", "sInstance"},
+            {"android.telephony.TelephonyManager", "mContext"},
+            {"android.telephony.TelephonyManager", "mSubId"},
     };
 
     @Rule
@@ -93,6 +130,7 @@ public class HiddenApiBypassTest {
 
     @Test
     public void ItestFieldsFromHiddenApiList() throws ClassNotFoundException {
+        assumeTrue(Build.VERSION.SDK_INT >= 37);
         for (var hiddenField : HIDDEN_API_FIELDS) {
             Class<?> clazz = Class.forName(hiddenField[0]);
             boolean found = containsField(HiddenApiBypass.getInstanceFields(clazz), hiddenField[1])
