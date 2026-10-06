@@ -181,7 +181,10 @@ jobs:
           # drop box before each reboot instead.
           printf '%s\n' "$("$adb" -s emulator-5554 get-state 2>&1 || true)" > emulator-diagnostics/guest-adb-state.txt
           ps -ef > emulator-diagnostics/host-processes.txt 2>&1 || true
-          (command -v free > /dev/null && free -m || vm_stat) > emulator-diagnostics/host-memory.txt 2>&1 || true
+          {
+            command -v free > /dev/null && free -m || vm_stat
+            ps -eo pid,rss,comm --sort=-rss | head -n 20
+          } > emulator-diagnostics/host-memory.txt 2>&1 || true
           df -h > emulator-diagnostics/host-disk.txt 2>&1 || true
       - name: Upload emulator diagnostics
         if: ${{ failure() }}

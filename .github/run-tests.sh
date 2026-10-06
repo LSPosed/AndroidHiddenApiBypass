@@ -4,12 +4,10 @@
 # The action executes every line of its `script` input as a separate `sh -c`, so the workflow only
 # calls this file and everything else lives here.
 #
-# The API 36/37 images publish system_server's services before the boot has settled, so a run started
-# too early fails to install the test APK ("cmd: Can't find service: package") while Gradle still
-# reports success, and running before user 0 is unlocked (sys.user.0.ce_available) makes ContextImpl
-# fail to create the app's CE cache dir, which drops the offset cache the second run reads. The
-# action already waits for sys.boot_completed, but both of those can still be missing at that point,
-# so wait for the services and the unlocked user - held for a moment - before each run.
+# The action waits for sys.boot_completed and runs its own boot commands before this script, so both
+# runs start right away. They run with `--no-daemon`, so no long-lived Gradle JVM competes with the
+# 4 GB emulator on the 16 GB runner: the system_server restarts we chase look like host memory
+# pressure, so host and guest memory are sampled while the tests run.
 #
 # Neither run is retried and the guest is never rebooted: a run that does not execute the tests fails
 # the job. On failure the guest state is captured, because the emulator is gone by the time the
@@ -26,6 +24,7 @@ results=library/build/outputs/androidTest-results/connected/debug
 diagnostics=emulator-diagnostics
 logcat_full="$diagnostics/logcat-full.log"
 logcat_pid=
+memory_pid=
 
 prop() {
     "$adb" -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
@@ -47,21 +46,6 @@ enable_root_adb() {
     fi
 }
 
-services_up() {
-    "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
-        "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1
-}
-
-user_unlocked() {
-    [ "$(prop sys.user.0.ce_available)" = "true" ]
-}
-
-# The action already waits for sys.boot_completed before it runs this script, but system_server's
-# services and the unlocked user can still be missing at that point.
-ready() {
-    services_up && user_unlocked
-}
-
 # Streams the log buffers into one file, which survives the end of the run. The stats buffer is
 # skipped on purpose: it is the bulk of the volume and carries no crash evidence.
 start_logcat() {
@@ -73,31 +57,36 @@ start_logcat() {
     logcat_pid=$!
 }
 
-stop_logcat() {
+# Samples what the host and the guest have left while the tests run, which logcat cannot show.
+start_memory_sampler() {
+    mkdir -p "$diagnostics"
+    while true; do
+        {
+            echo "=== $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
+            echo "--- host ---"
+            free -m 2>/dev/null | sed -n '2p'
+            ps -eo rss,comm --sort=-rss 2>/dev/null | sed -n '2,6p'
+            echo "--- guest ---"
+            "$adb" -s "$serial" shell 'head -n 3 /proc/meminfo' 2>/dev/null
+        } >> "$diagnostics/memory.log" 2>&1
+        sleep 15
+    done &
+    memory_pid=$!
+}
+
+stop_background_captures() {
     if [ -n "$logcat_pid" ]; then
         kill "$logcat_pid" >/dev/null 2>&1 || true
         wait "$logcat_pid" 2>/dev/null || true
         logcat_pid=
     fi
+    if [ -n "$memory_pid" ]; then
+        kill "$memory_pid" >/dev/null 2>&1 || true
+        memory_pid=
+    fi
 }
 
-trap 'stop_logcat' EXIT
-
-# 0: services up and user 0 unlocked, 1: not ready in time.
-wait_for_ready() {
-    i=0
-    while [ "$i" -lt 24 ]; do
-        if ready; then
-            # Keep checking for a moment, so Gradle does not start installing into a framework that
-            # is about to go away again.
-            sleep 10
-            ready && return 0
-        fi
-        i=$((i + 1))
-        sleep 5
-    done
-    return 1
-}
+trap 'stop_background_captures' EXIT
 
 # capture_state <name>: getprop, dmesg, boot state and the drop box, which logcat does not carry.
 capture_state() {
@@ -159,13 +148,8 @@ run_phase() {
     label="$1"
     slug=$(printf '%s' "$label" | tr ' ' '-')
     shift
-    wait_for_ready
-    if [ $? -ne 0 ]; then
-        fail_with_diagnostics "$label" "$slug" \
-            "services and an unlocked user 0 were not ready after 2 minutes (ce_available=$(prop sys.user.0.ce_available))"
-    fi
     rm -rf library/build/outputs/androidTest-results
-    ./gradlew connectedCheck "$@"
+    ./gradlew connectedCheck --no-daemon "$@"
     status=$?
     if ls "$results"/TEST-*.xml >/dev/null 2>&1; then
         if [ "$status" -ne 0 ]; then
@@ -174,10 +158,11 @@ run_phase() {
         fi
         return 0
     fi
-    fail_with_diagnostics "$label" "$slug" "ran no test (the framework was not ready)"
+    fail_with_diagnostics "$label" "$slug" "produced no test results"
 }
 
 enable_root_adb
 start_logcat
+start_memory_sampler
 run_phase "first run" -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
 run_phase "load run" -Pandroid.testInstrumentationRunnerArguments.load=true
