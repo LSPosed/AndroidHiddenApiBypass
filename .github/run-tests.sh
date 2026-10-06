@@ -7,9 +7,9 @@
 # The API 36/37 images publish system_server's services before the boot has settled, so a run started
 # too early fails to install the test APK ("cmd: Can't find service: package") while Gradle still
 # reports success, and running before user 0 is unlocked (sys.user.0.ce_available) makes ContextImpl
-# fail to create the app's CE cache dir, which drops the offset cache the second run reads. So wait
-# for a completed boot, the services and the unlocked user, and require that to hold for a moment,
-# before each run.
+# fail to create the app's CE cache dir, which drops the offset cache the second run reads. The
+# action already waits for sys.boot_completed, but both of those can still be missing at that point,
+# so wait for the services and the unlocked user - held for a moment - before each run.
 #
 # Neither run is retried and the guest is never rebooted: a run that does not execute the tests fails
 # the job. On failure the guest state is captured, because the emulator is gone by the time the
@@ -52,8 +52,14 @@ services_up() {
         "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1
 }
 
+user_unlocked() {
+    [ "$(prop sys.user.0.ce_available)" = "true" ]
+}
+
+# The action already waits for sys.boot_completed before it runs this script, but system_server's
+# services and the unlocked user can still be missing at that point.
 ready() {
-    [ "$(prop sys.boot_completed)" = "1" ] && services_up && [ "$(prop sys.user.0.ce_available)" = "true" ]
+    services_up && user_unlocked
 }
 
 # Streams the log buffers into one file, which survives the end of the run. The stats buffer is
@@ -77,12 +83,8 @@ stop_logcat() {
 
 trap 'stop_logcat' EXIT
 
-# 0: booted, services up and user 0 unlocked; 1: not ready in time; 2: booted but the framework is
-# gone.
+# 0: services up and user 0 unlocked, 1: not ready in time.
 wait_for_ready() {
-    if [ "$(prop sys.boot_completed)" = "1" ] && ! services_up; then
-        return 2
-    fi
     i=0
     while [ "$i" -lt 24 ]; do
         if ready; then
@@ -158,11 +160,9 @@ run_phase() {
     slug=$(printf '%s' "$label" | tr ' ' '-')
     shift
     wait_for_ready
-    state=$?
-    if [ "$state" -eq 2 ]; then
-        fail_with_diagnostics "$label" "$slug" "the framework is gone while the guest is booted"
-    elif [ "$state" -ne 0 ]; then
-        fail_with_diagnostics "$label" "$slug" "not ready after 2 minutes (boot_completed=$(prop sys.boot_completed) ce_available=$(prop sys.user.0.ce_available))"
+    if [ $? -ne 0 ]; then
+        fail_with_diagnostics "$label" "$slug" \
+            "services and an unlocked user 0 were not ready after 2 minutes (ce_available=$(prop sys.user.0.ce_available))"
     fi
     rm -rf library/build/outputs/androidTest-results
     ./gradlew connectedCheck "$@"
