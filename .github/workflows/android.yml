@@ -146,7 +146,7 @@ jobs:
           arch: ${{ matrix.arch }}
           target: ${{ matrix.target }}
           channel: canary
-          # The action runs each line of `script` as its own `sh -c`, so the retry logic lives in
+          # The action runs each line of `script` as its own `sh -c`, so the whole sequence lives in
           # .github/run-tests.sh instead.
           script: |
             sh .github/run-tests.sh
