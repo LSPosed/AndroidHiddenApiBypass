@@ -147,31 +147,15 @@ jobs:
           target: ${{ matrix.target }}
           channel: canary
           script: |
-            sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-            # The emulator-runner boot check can pass before system_server publishes the
-            # framework services on newer system images. Installing the test APK then fails
-            # with "cmd: Can't find service: package" while Gradle still reports success.
-            ready=false
-            for _ in $(seq 1 60); do
-              if "$sdk/platform-tools/adb" -s emulator-5554 shell cmd package list packages > /dev/null 2>&1 &&
-                 "$sdk/platform-tools/adb" -s emulator-5554 shell am get-current-user > /dev/null 2>&1; then
-                ready=true
-                break
-              fi
-              sleep 5
-            done
-            if [ "$ready" != true ]; then
-              echo "::error::emulator-5554 framework services are not ready after 300s"
-              exit 1
-            fi
+            # The action runs every line as its own `sh -c`, so each line must be self-contained.
+            # The emulator-runner boot check can pass before system_server publishes the framework
+            # services on newer system images; the first connectedCheck then fails to install the
+            # test APK with "cmd: Can't find service: package" while Gradle still reports success.
+            adb="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platform-tools/adb"; i=0; until [ "$i" -ge 60 ]; do "$adb" -s emulator-5554 shell cmd package list packages >/dev/null 2>&1 && "$adb" -s emulator-5554 shell am get-current-user >/dev/null 2>&1 && break; i=$((i + 1)); sleep 5; done; [ "$i" -lt 60 ] || { echo "::error::emulator-5554 framework services are not ready after 300s"; exit 1; }
             ./gradlew connectedCheck -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
-            # This run has to populate the offset cache the next run asserts on. Gradle has
-            # been observed reporting success when the test APK never installed, so fail
-            # here instead of surfacing that as a confusing assertion failure later.
-            if ! ls library/build/outputs/androidTest-results/connected/debug/TEST-*.xml > /dev/null 2>&1; then
-              echo "::error::the first connectedCheck produced no test results"
-              exit 1
-            fi
+            # This run has to populate the offset cache the next run asserts on, and Gradle has been
+            # observed reporting success when the test APK never installed.
+            ls library/build/outputs/androidTest-results/connected/debug/TEST-*.xml >/dev/null 2>&1 || { echo "::error::the first connectedCheck produced no test results"; exit 1; }
             ./gradlew connectedCheck -Pandroid.testInstrumentationRunnerArguments.load=true
           force-avd-creation: false
           emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
