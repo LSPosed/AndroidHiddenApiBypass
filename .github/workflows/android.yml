@@ -154,9 +154,10 @@ jobs:
           emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
           pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}
           disable-animations: true
-          # The 16 KB page size images need more headroom than the default: the systems we saw
-          # restarting system_server were these rows.
-          ram-size: ${{ matrix.target == 'google_apis_ps16k' && '6144M' || '4096M' }}
+          # The Google APIs images (36.1, 37.0, 37.1, 37.2, CANARY) are the ones whose system_server
+          # kept restarting, so they get 6 GB; the lighter aosp_atd / default / android-tv rows keep
+          # 4 GB. startsWith avoids the && / || precedence trap in expressions.
+          ram-size: ${{ startsWith(matrix.target, 'google_apis') && '6144M' || '4096M' }}
           disk-size: 6000M
           heap-size: 600M
           cores: 4
