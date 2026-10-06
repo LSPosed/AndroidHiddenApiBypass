@@ -10,9 +10,9 @@
 # then fails to install the test APK with "cmd: Can't find service: package" while Gradle still
 # reports success, and further attempts fail the same way until the guest is rebooted.
 #
-# So: require the framework to stay up, and reboot the guest once and retry whenever a run did not
-# actually produce test results. Before rebooting, dump logcat and dmesg, because the reboot clears
-# them and they are the only evidence of what killed the framework. A guest reboot keeps installed
+# So: capture logcat from the start (a later `logcat -d` only sees what the ring buffers still
+# hold, and the reboot wipes them), wait for the framework to stay up, and reboot the guest once and
+# retry whenever a run did not actually produce test results. A guest reboot keeps installed
 # packages and their data, which is what the second (-e load true) run reads its offset cache from.
 set -u
 
@@ -23,12 +23,35 @@ adb="$sdk/platform-tools/adb"
 serial=emulator-5554
 results=library/build/outputs/androidTest-results/connected/debug
 diagnostics=emulator-diagnostics
+logcat_full="$diagnostics/logcat-full.log"
 attempts=2
+logcat_pid=
 
 framework_up() {
     "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
         "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1
 }
+
+# Streams the log buffers into one file, so the reboot cannot take the evidence with it. The stats
+# buffer is skipped on purpose: it is the bulk of the volume and carries no crash evidence.
+start_logcat() {
+    mkdir -p "$diagnostics"
+    {
+        echo "=== logcat capture started at $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
+        "$adb" -s "$serial" logcat -b main,system,crash,events -v threadtime
+    } >> "$logcat_full" 2>&1 &
+    logcat_pid=$!
+}
+
+stop_logcat() {
+    if [ -n "$logcat_pid" ]; then
+        kill "$logcat_pid" >/dev/null 2>&1 || true
+        wait "$logcat_pid" 2>/dev/null || true
+        logcat_pid=
+    fi
+}
+
+trap 'stop_logcat' EXIT
 
 # 0: framework is up and stayed up for a moment, 1: not up (yet), 2: guest booted but the framework
 # is gone, which only a reboot fixes.
@@ -51,18 +74,15 @@ wait_for_framework() {
     return 1
 }
 
-# capture_diagnostics <name>; prints the file it wrote, which the workflow uploads with the
-# emulator diagnostics.
-capture_diagnostics() {
-    file="$diagnostics/framework-$1.log"
+# capture_state <name>: dmesg and boot state, which logcat does not carry.
+capture_state() {
+    file="$diagnostics/framework-$1.txt"
     mkdir -p "$diagnostics"
     {
         echo "=== adb devices ==="
         "$adb" devices -l
         echo "=== sys.boot_completed ==="
         "$adb" -s "$serial" shell getprop sys.boot_completed
-        echo "=== logcat (all buffers) ==="
-        "$adb" -s "$serial" logcat -d -b all -v threadtime
         echo "=== dmesg (tail) ==="
         "$adb" -s "$serial" shell dmesg | tail -n 500
     } > "$file" 2>&1 || true
@@ -70,15 +90,19 @@ capture_diagnostics() {
 }
 
 report_crash_evidence() {
-    echo "::warning::what happened before the framework died ($1):"
-    grep -Ei 'FATAL EXCEPTION|beginning of crash|lowmemorykiller|lmkd|out of memory|SIGKILL|Watchdog|system_server|RescueParty' "$1" |
+    echo "::warning::crash evidence ($logcat_full, $1):"
+    grep -Ei 'FATAL EXCEPTION|beginning of crash|lowmemorykiller|lmkd|out of memory|SIGKILL|Watchdog|system_server|RescueParty' "$logcat_full" |
         tail -n 25 || true
+    echo "::warning::last logcat lines before the reboot:"
+    tail -n 15 "$logcat_full" || true
 }
 
 reboot_guest() {
     echo "::warning::rebooting $serial, the framework did not come back on its own"
+    stop_logcat
     "$adb" -s "$serial" reboot >/dev/null 2>&1 || true
     "$adb" -s "$serial" wait-for-device >/dev/null 2>&1 || true
+    start_logcat
 }
 
 # run_tests <label> <gradle argument...>
@@ -109,12 +133,13 @@ run_tests() {
         else
             echo "::warning::$label: attempt $attempt: $serial framework services are not ready"
         fi
-        report_crash_evidence "$(capture_diagnostics "$slug-$attempt")"
+        report_crash_evidence "$(capture_state "$slug-$attempt")"
         reboot_guest
     done
     echo "::error::$label: no test results after $attempts attempts"
     exit 1
 }
 
+start_logcat
 run_tests "first run" -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
 run_tests "load run" -Pandroid.testInstrumentationRunnerArguments.load=true
