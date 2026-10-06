@@ -4,12 +4,15 @@
 # The action executes every line of its `script` input as a separate `sh -c`, so the workflow only
 # calls this file and everything else lives here.
 #
-# On API 36+ images the framework can answer while the emulator is still under load and then crash
-# and come back a minute later (the runner's own broadcasts log "Can't find service: activity" and
-# "Failure calling service activity: Broken pipe"). The first connectedCheck then fails to install
-# the test APK with "cmd: Can't find service: package" while Gradle still reports success. Waiting
-# once is therefore not enough: require the services to stay up, and retry a run until it actually
-# produced test results.
+# The API 36/37 images do not survive a test run cleanly: the framework answers the boot checks,
+# then dies while the tests run ("Failure calling service activity: Broken pipe (32)", followed by
+# "Can't find service: activity/package") and does not come back on its own. The next connectedCheck
+# then fails to install the test APK with "cmd: Can't find service: package" while Gradle still
+# reports success, and every further attempt fails the same way until the guest is rebooted.
+#
+# So: require the framework to stay up, and reboot the guest and retry whenever a run did not
+# actually produce test results. A guest reboot keeps installed packages and their data, which is
+# what the second (-e load true) run reads its offset cache from.
 set -u
 
 cd "$(dirname "$0")/.."
@@ -18,24 +21,38 @@ sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 adb="$sdk/platform-tools/adb"
 serial=emulator-5554
 results=library/build/outputs/androidTest-results/connected/debug
-attempts=4
+attempts=3
 
+framework_up() {
+    "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
+        "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1
+}
+
+# 0: framework is up and stayed up for a moment, 1: not up (yet), 2: guest booted but the framework
+# is gone, which only a reboot fixes.
 wait_for_framework() {
+    booted=$("$adb" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+    if [ "$booted" = "1" ] && ! framework_up; then
+        return 2
+    fi
     i=0
-    while [ "$i" -lt 24 ]; do
-        if "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
-            "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1; then
+    while [ "$i" -lt 18 ]; do
+        if framework_up; then
             # The services also have to survive the next few seconds, otherwise Gradle installs
-            # into the restart window.
+            # into the window where the framework is coming back up.
             sleep 10
-            if "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1; then
-                return 0
-            fi
+            framework_up && return 0
         fi
         i=$((i + 1))
         sleep 5
     done
     return 1
+}
+
+reboot_guest() {
+    echo "::warning::rebooting $serial, the framework did not come back on its own"
+    "$adb" -s "$serial" reboot >/dev/null 2>&1 || true
+    "$adb" -s "$serial" wait-for-device >/dev/null 2>&1 || true
 }
 
 # run_tests <label> <gradle argument...>
@@ -45,23 +62,27 @@ run_tests() {
     attempt=0
     while [ "$attempt" -lt "$attempts" ]; do
         attempt=$((attempt + 1))
-        if ! wait_for_framework; then
-            echo "::error::$label: $serial framework services are not ready after 2 minutes"
-            exit 1
-        fi
-        # Results of an earlier attempt must not be mistaken for this one's.
-        rm -rf library/build/outputs/androidTest-results
-        ./gradlew connectedCheck "$@"
-        status=$?
-        if ls "$results"/TEST-*.xml >/dev/null 2>&1; then
-            if [ "$status" -ne 0 ]; then
-                echo "::error::$label: failing tests"
-                exit 1
+        wait_for_framework
+        ready=$?
+        if [ "$ready" -eq 0 ]; then
+            # Results of an earlier attempt must not be mistaken for this one's.
+            rm -rf library/build/outputs/androidTest-results
+            ./gradlew connectedCheck "$@"
+            status=$?
+            if ls "$results"/TEST-*.xml >/dev/null 2>&1; then
+                if [ "$status" -ne 0 ]; then
+                    echo "::error::$label: failing tests"
+                    exit 1
+                fi
+                return 0
             fi
-            return 0
+            echo "::warning::$label: attempt $attempt ran no test (the framework was not ready)"
+        elif [ "$ready" -eq 2 ]; then
+            echo "::warning::$label: attempt $attempt: the framework is gone while the guest is booted"
+        else
+            echo "::warning::$label: attempt $attempt: $serial framework services are not ready"
         fi
-        echo "::warning::$label: attempt $attempt ran no test (the framework was not ready), retrying"
-        sleep 30
+        reboot_guest
     done
     echo "::error::$label: no test results after $attempts attempts"
     exit 1
