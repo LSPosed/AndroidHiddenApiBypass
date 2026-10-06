@@ -357,24 +357,7 @@ public final class HiddenApiBypass {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
         List<Field> fields = getFieldsFromArt(clazz, false);
         if (fields != null) return fields;
-        fields = getFieldsWithProperty(clazz, false);
-        if (fields != null) return fields;
         return List.of();
-    }
-
-    @Nullable
-    private static List<Field> getFieldsWithProperty(@NonNull Class<?> clazz, boolean wantStatic) {
-        try {
-            var fields = LSPass.getDeclaredFields(clazz);
-            List<Field> list = new ArrayList<>(fields.size());
-            for (Field field : fields) {
-                if (Modifier.isStatic(field.getModifiers()) == wantStatic) list.add(field);
-            }
-            return list;
-        } catch (RuntimeException | LinkageError e) {
-            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to read fields with Property", e);
-            return null;
-        }
     }
 
     @Nullable
@@ -420,8 +403,6 @@ public final class HiddenApiBypass {
     public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
         List<Field> fields = getFieldsFromArt(clazz, true);
-        if (fields != null) return fields;
-        fields = getFieldsWithProperty(clazz, true);
         if (fields != null) return fields;
         return List.of();
     }
