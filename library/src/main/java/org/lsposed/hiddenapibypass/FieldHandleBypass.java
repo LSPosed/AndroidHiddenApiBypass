@@ -21,10 +21,12 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
+import dalvik.system.PathClassLoader;
+
 import java.io.IOException;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,30 +37,12 @@ import stub.sun.misc.Unsafe;
 
 @RequiresApi(Build.VERSION_CODES.P)
 final class FieldHandleBypass {
-    private static final int FIELD_ACCESS_PUBLIC = 0x0001;
-    private static final int FIELD_ACCESS_STATIC = 0x0008;
-
     private static final Map<String, FieldHandleBypass> instances = new HashMap<>();
 
     private final Unsafe unsafe;
-    private final long artOffset;
     private final long classFieldsOffset;
-    private final long helperFieldsOffset;
-    private final long artFieldSize;
-    private final long artFieldBias;
-    private final long artFieldAccessFlagsOffset;
-    private final long artFieldDeclaringClassOffset;
-    private final long artFieldDexIndexOffset;
-    private final long artFieldOffsetOffset;
-    private final long fieldAccessFlagsOffset;
-    private final long fieldArtFieldIndexOffset;
     private final long fieldDeclaringClassOffset;
-    private final long fieldOffsetOffset;
     private final long fieldTypeOffset;
-    private final long referenceHolderValueOffset;
-    private final Class<?> helperClass;
-    private final int helperClassReference;
-    private final int helperPublicFlags;
 
     static FieldHandleBypass get(Unsafe unsafe, long artOffset, long classFieldsOffset,
                                  long helperFieldsOffset,
@@ -69,236 +53,157 @@ final class FieldHandleBypass {
         synchronized (FieldHandleBypass.class) {
             FieldHandleBypass resolver = instances.get(key);
             if (resolver == null) {
-                resolver = new FieldHandleBypass(unsafe, artOffset, classFieldsOffset,
-                        helperFieldsOffset,
-                        artFieldSize, artFieldBias, artFieldAccessFlagsOffset);
+                resolver = new FieldHandleBypass(unsafe, classFieldsOffset);
                 instances.put(key, resolver);
             }
             return resolver;
         }
     }
 
-    private FieldHandleBypass(Unsafe unsafe, long artOffset, long classFieldsOffset,
-                              long helperFieldsOffset,
-                              long artFieldSize, long artFieldBias,
-                              long artFieldAccessFlagsOffset)
+    private FieldHandleBypass(Unsafe unsafe, long classFieldsOffset)
             throws ReflectiveOperationException {
         this.unsafe = unsafe;
-        this.artOffset = artOffset;
         this.classFieldsOffset = classFieldsOffset;
-        this.helperFieldsOffset = helperFieldsOffset;
-        this.artFieldSize = artFieldSize;
-        this.artFieldBias = artFieldBias;
-        this.artFieldAccessFlagsOffset = artFieldAccessFlagsOffset;
 
         Offsets offsets = readOffsets(unsafe);
-        this.fieldAccessFlagsOffset = offsets.fieldAccessFlagsOffset;
-        this.fieldArtFieldIndexOffset = offsets.fieldArtFieldIndexOffset;
-        this.fieldDeclaringClassOffset = offsets.fieldDeclaringClassOffset;
-        this.fieldOffsetOffset = offsets.fieldOffsetOffset;
-        this.fieldTypeOffset = offsets.fieldTypeOffset;
-        this.referenceHolderValueOffset = unsafe.objectFieldOffset(
-                ReferenceHolder.class.getDeclaredField("value"));
-
-        helperClass = Helper.FieldBridge.class;
-        Field helperField = helperClass.getDeclaredField("i");
-        Field helperNextField = helperClass.getDeclaredField("j");
-        Field probeField = Helper.NeverCall.class.getDeclaredField("i");
-        Field probeNextField = Helper.NeverCall.class.getDeclaredField("j");
-
-        long helperArtField = getArtField(helperField);
-        long helperNextArtField = getArtField(helperNextField);
-        long probeArtField = getArtField(probeField);
-        long probeNextArtField = getArtField(probeNextField);
-
-        artFieldOffsetOffset = findArtFieldOffsetOffset(helperArtField, helperField,
-                helperNextArtField, helperNextField);
-        artFieldDeclaringClassOffset = findArtFieldDeclaringClassOffset(helperArtField,
-                helperNextArtField, probeArtField, probeNextArtField);
-        artFieldDexIndexOffset = findArtFieldDexIndexOffset();
-
-        helperClassReference = unsafe.getInt(helperArtField + artFieldDeclaringClassOffset);
-        helperPublicFlags = unsafe.getInt(helperArtField + artFieldAccessFlagsOffset);
-
-        if ((helperPublicFlags & FIELD_ACCESS_PUBLIC) == 0
-                || (helperPublicFlags & FIELD_ACCESS_STATIC) != 0) {
-            throw new NoSuchFieldException("Helper.FieldBridge.i");
-        }
+        fieldDeclaringClassOffset = offsets.fieldDeclaringClassOffset;
+        fieldTypeOffset = offsets.fieldTypeOffset;
     }
 
     @NonNull
-    synchronized List<Field> reflect(@NonNull Class<?> clazz)
+    List<Field> reflect(@NonNull Class<?> clazz)
             throws ReflectiveOperationException, IOException {
         long fields = unsafe.getLong(clazz, classFieldsOffset);
-        if (fields == 0) return List.of();
+        if (fields == 0 || unsafe.getInt(fields) == 0) return List.of();
 
-        int numFields = unsafe.getInt(fields);
-        if (numFields == 0) return List.of();
+        Class<?> clonedClass = CloneClassCache.get(clazz);
+        if (clonedClass == clazz) throw new ClassNotFoundException(clazz.getName());
 
-        long helperFields = unsafe.getLong(helperClass, helperFieldsOffset);
-        if (helperFields == 0 || unsafe.getInt(helperFields) == 0) {
-            throw new NoSuchFieldException("Helper.FieldBridge.fields");
+        Field[] fieldsFromClone = clonedClass.getDeclaredFields();
+        ArrayList<Field> result = new ArrayList<>(fieldsFromClone.length);
+        for (Field field : fieldsFromClone) {
+            unsafe.putObject(field, fieldDeclaringClassOffset, clazz);
+            if (unsafe.getObject(field, fieldTypeOffset) == clonedClass) {
+                unsafe.putObject(field, fieldTypeOffset, clazz);
+            }
+            result.add(field);
         }
-        int helperFieldsLength = unsafe.getInt(helperFields);
-        long helperFirstField = helperFields + artFieldBias;
-        long savedHelperFields = unsafe.allocateMemory(artFieldSize * helperFieldsLength);
-        try {
-            copyMemory(helperFirstField, savedHelperFields, artFieldSize * helperFieldsLength);
-            Map<String, String> descriptors = FieldTypeCache.get(clazz);
-            int targetClassReference = objectReference(clazz);
-            ArrayList<Field> result = new ArrayList<>(numFields);
-            for (int start = 0; start < numFields; start += helperFieldsLength) {
-                int batchSize = Math.min(helperFieldsLength, numFields - start);
-                Field[] reflected;
-                try {
-                    for (int slot = 0; slot < batchSize; ++slot) {
-                        long originalField = fields + artFieldBias + artFieldSize * (start + slot);
-                        long helperField = helperFirstField + artFieldSize * slot;
-                        int helperDexIndex = unsafe.getInt(savedHelperFields
-                                + artFieldSize * slot + artFieldDexIndexOffset);
-                        copyMemory(originalField, helperField, artFieldSize);
-                        unsafe.putInt(helperField + artFieldDeclaringClassOffset, helperClassReference);
-                        unsafe.putInt(helperField + artFieldDexIndexOffset, helperDexIndex);
-                        unsafe.putInt(helperField + artFieldAccessFlagsOffset, helperPublicFlags);
+        return result;
+    }
+
+    private static final class CloneClassCache {
+        private static final Map<Class<?>, Class<?>> classes = new WeakHashMap<>();
+
+        private static synchronized Class<?> get(Class<?> clazz) throws ClassNotFoundException {
+            Class<?> cached = classes.get(clazz);
+            if (cached != null) return cached;
+
+            ArrayList<String> paths = DexPathFinder.paths(clazz);
+            if (paths.isEmpty()) throw new ClassNotFoundException(clazz.getName());
+
+            ClassLoader parent = clazz.getClassLoader();
+            if (parent == null) parent = FieldHandleBypass.class.getClassLoader();
+
+            var loader = new CloneClassLoader(joinDexPaths(paths), parent, clazz.getName());
+            Class<?> cloned = Class.forName(clazz.getName(), false, loader);
+            classes.put(clazz, cloned);
+            return cloned;
+        }
+
+        private static String joinDexPaths(ArrayList<String> paths) {
+            StringBuilder builder = new StringBuilder();
+            for (String path : paths) {
+                if (builder.length() != 0) builder.append(':');
+                builder.append(path);
+            }
+            return builder.toString();
+        }
+    }
+
+    private static final class CloneClassLoader extends PathClassLoader {
+        private final String targetClassName;
+
+        private CloneClassLoader(String dexPath, ClassLoader parent, String targetClassName) {
+            super(dexPath, parent);
+            this.targetClassName = targetClassName;
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            synchronized (this) {
+                Class<?> clazz = findLoadedClass(name);
+                if (clazz == null && targetClassName.equals(name)) {
+                    try {
+                        clazz = findClass(name);
+                    } catch (ClassNotFoundException ignored) {
                     }
-                    unsafe.putInt(helperFields, batchSize);
-                    reflected = helperClass.getDeclaredFields();
-                } finally {
-                    copyMemory(savedHelperFields, helperFirstField, artFieldSize * helperFieldsLength);
-                    unsafe.putInt(helperFields, helperFieldsLength);
                 }
+                if (clazz == null) clazz = super.loadClass(name, false);
+                if (resolve) resolveClass(clazz);
+                return clazz;
+            }
+        }
+    }
 
-                if (reflected.length != batchSize) {
-                    throw new NoSuchFieldException("Expected " + batchSize
-                            + " fields, got " + reflected.length);
+    private static final class DexPathFinder {
+        private static ArrayList<String> paths(Class<?> clazz) {
+            ArrayList<String> paths = new ArrayList<>();
+
+            ClassLoader classLoader = clazz.getClassLoader();
+            while (classLoader != null) {
+                addClassLoaderPaths(paths, classLoader.toString());
+                classLoader = classLoader.getParent();
+            }
+
+            addDexPaths(paths, System.getProperty("java.class.path", ""));
+            addDexPaths(paths, System.getProperty("java.boot.class.path", ""));
+            addDexPaths(paths, System.getenv("BOOTCLASSPATH"));
+            addDexPaths(paths, System.getenv("DEX2OATBOOTCLASSPATH"));
+            addMappedDexPaths(paths);
+            return paths;
+        }
+
+        private static void addDexPaths(ArrayList<String> paths, String value) {
+            if (value == null || value.isEmpty()) return;
+            for (String path : value.split(":")) {
+                addPath(paths, path);
+            }
+        }
+
+        private static void addClassLoaderPaths(ArrayList<String> paths, String value) {
+            int start = 0;
+            while (true) {
+                start = value.indexOf('"', start);
+                if (start < 0) return;
+                start++;
+                int end = value.indexOf('"', start);
+                if (end < 0) return;
+                addPath(paths, value.substring(start, end));
+                start = end + 1;
+            }
+        }
+
+        private static void addMappedDexPaths(ArrayList<String> paths) {
+            try (var reader = Files.newBufferedReader(Paths.get("/proc/self/maps"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    int start = line.indexOf('/');
+                    if (start < 0) continue;
+                    int end = line.indexOf(" (deleted)", start);
+                    addPath(paths, end < 0 ? line.substring(start) : line.substring(start, end));
                 }
-                for (Field field : reflected) {
-                    int slot = unsafe.getInt(field, fieldArtFieldIndexOffset);
-                    if (slot < 0 || slot >= batchSize) {
-                        throw new NoSuchFieldException("Invalid artFieldIndex " + slot);
-                    }
-                    int index = start + slot;
-                    long originalField = fields + artFieldBias + artFieldSize * index;
-                    if (unsafe.getInt(originalField + artFieldDeclaringClassOffset)
-                            != targetClassReference) {
-                        continue;
-                    }
-                    int accessFlags = unsafe.getInt(originalField + artFieldAccessFlagsOffset);
-                    int offset = unsafe.getInt(originalField + artFieldOffsetOffset);
-
-                    unsafe.putObject(field, fieldDeclaringClassOffset, clazz);
-                    unsafe.putInt(field, fieldArtFieldIndexOffset, index);
-                    unsafe.putInt(field, fieldAccessFlagsOffset, accessFlags);
-                    unsafe.putInt(field, fieldOffsetOffset, offset);
-
-                    String descriptor = descriptors.get(field.getName());
-                    if (descriptor == null) throw new NoSuchFieldException(field.getName());
-                    unsafe.putObject(field, fieldTypeOffset,
-                            classForDescriptor(descriptor, clazz.getClassLoader()));
-                    result.add(field);
-                }
-            }
-            return result;
-        } finally {
-            copyMemory(savedHelperFields, helperFirstField, artFieldSize * helperFieldsLength);
-            unsafe.putInt(helperFields, helperFieldsLength);
-            unsafe.freeMemory(savedHelperFields);
-        }
-    }
-
-    private int objectReference(Object object) {
-        ReferenceHolder holder = new ReferenceHolder();
-        holder.value = object;
-        return unsafe.getInt(holder, referenceHolderValueOffset);
-    }
-
-    private long getArtField(Field field) throws ReflectiveOperationException {
-        field.setAccessible(true);
-        MethodHandle handle = MethodHandles.lookup().unreflectGetter(field);
-        return unsafe.getLong(handle, artOffset);
-    }
-
-    private void copyMemory(long from, long to, long count) {
-        long offset = 0;
-        while (offset + 8 <= count) {
-            unsafe.putLong(to + offset, unsafe.getLong(from + offset));
-            offset += 8;
-        }
-        while (offset < count) {
-            unsafe.putByte(to + offset, unsafe.getByte(from + offset));
-            offset++;
-        }
-    }
-
-    private long findArtFieldDeclaringClassOffset(long helperField, long helperNextField,
-                                                  long probeField, long probeNextField)
-            throws NoSuchFieldException {
-        for (long offset = 0; offset < artFieldSize; offset += 4) {
-            if (offset == artFieldAccessFlagsOffset || offset == artFieldOffsetOffset) continue;
-            int helperValue = unsafe.getInt(helperField + offset);
-            if (helperValue == unsafe.getInt(helperNextField + offset)
-                    && helperValue != unsafe.getInt(probeField + offset)
-                    && unsafe.getInt(probeField + offset) == unsafe.getInt(probeNextField + offset)) {
-                return offset;
+            } catch (IOException | SecurityException ignored) {
             }
         }
-        throw new NoSuchFieldException("ArtField.declaring_class_");
-    }
 
-    private long findArtFieldDexIndexOffset() throws NoSuchFieldException {
-        for (long offset = 0; offset < artFieldSize; offset += 4) {
-            if (offset != artFieldDeclaringClassOffset
-                    && offset != artFieldAccessFlagsOffset
-                    && offset != artFieldOffsetOffset) {
-                return offset;
-            }
+        private static void addPath(ArrayList<String> paths, String path) {
+            if (isDexPath(path) && !paths.contains(path)) paths.add(path);
         }
-        throw new NoSuchFieldException("ArtField.field_dex_idx_");
-    }
 
-    private long findArtFieldOffsetOffset(long helperField, Field javaHelperField,
-                                          long helperNextField, Field javaHelperNextField)
-            throws NoSuchFieldException {
-        int helperOffset = unsafe.getInt(javaHelperField, fieldOffsetOffset);
-        int helperNextOffset = unsafe.getInt(javaHelperNextField, fieldOffsetOffset);
-        for (long offset = 0; offset < artFieldSize; offset += 4) {
-            if (offset == artFieldAccessFlagsOffset) continue;
-            if (unsafe.getInt(helperField + offset) == helperOffset
-                    && unsafe.getInt(helperNextField + offset) == helperNextOffset) {
-                return offset;
-            }
-        }
-        throw new NoSuchFieldException("ArtField.offset_");
-    }
-
-    private static Class<?> classForDescriptor(String descriptor, ClassLoader classLoader)
-            throws ClassNotFoundException {
-        switch (descriptor.charAt(0)) {
-            case 'Z':
-                return boolean.class;
-            case 'B':
-                return byte.class;
-            case 'C':
-                return char.class;
-            case 'S':
-                return short.class;
-            case 'I':
-                return int.class;
-            case 'J':
-                return long.class;
-            case 'F':
-                return float.class;
-            case 'D':
-                return double.class;
-            case 'V':
-                return void.class;
-            case '[':
-                return Class.forName(descriptor.replace('/', '.'), false, classLoader);
-            case 'L':
-                return Class.forName(descriptor.substring(1, descriptor.length() - 1)
-                        .replace('/', '.'), false, classLoader);
-            default:
-                throw new ClassNotFoundException(descriptor);
+        private static boolean isDexPath(String path) {
+            return path.endsWith(".apk")
+                    || path.endsWith(".jar")
+                    || path.endsWith(".dex");
         }
     }
 
@@ -309,10 +214,7 @@ final class FieldHandleBypass {
 
             DexFieldLayout.Layout field = scanner.layoutOf(DexFieldLayout.FIELD);
             return new Offsets(
-                    field.offsetOf("accessFlags"),
-                    field.offsetOf("artFieldIndex"),
                     field.offsetOf("declaringClass"),
-                    field.offsetOf("offset"),
                     field.offsetOf("type"));
         } catch (IOException | ReflectiveOperationException | RuntimeException e) {
             return readOffsetsClassLoader(unsafe);
@@ -323,71 +225,17 @@ final class FieldHandleBypass {
         ClassLoader bootClassloader = new CoreOjClassLoader();
         Class<?> fieldClass = bootClassloader.loadClass(Field.class.getName());
         return new Offsets(
-                unsafe.objectFieldOffset(fieldClass.getDeclaredField("accessFlags")),
-                unsafe.objectFieldOffset(fieldClass.getDeclaredField("artFieldIndex")),
                 unsafe.objectFieldOffset(fieldClass.getDeclaredField("declaringClass")),
-                unsafe.objectFieldOffset(fieldClass.getDeclaredField("offset")),
                 unsafe.objectFieldOffset(fieldClass.getDeclaredField("type")));
     }
 
-    private static String descriptorString(Class<?> clazz) {
-        if (clazz.isArray()) return clazz.getName().replace('.', '/');
-        return 'L' + clazz.getName().replace('.', '/') + ';';
-    }
-
-    private static final class FieldTypeCache {
-        private static final Map<Class<?>, Map<String, String>> cache = new WeakHashMap<>();
-
-        private static synchronized Map<String, String> get(Class<?> clazz)
-                throws IOException, ClassNotFoundException {
-            Map<String, String> cached = cache.get(clazz);
-            if (cached != null) return cached;
-
-            String descriptor = descriptorString(clazz);
-            for (String path : dexPaths()) {
-                if (path.isEmpty()) continue;
-                Map<String, String> fields;
-                try {
-                    fields = DexFieldLayout.findDeclaredFieldTypes(path, descriptor);
-                } catch (IOException | RuntimeException ignored) {
-                    continue;
-                }
-                if (fields != null) {
-                    cache.put(clazz, fields);
-                    return fields;
-                }
-            }
-            throw new ClassNotFoundException(descriptor);
-        }
-
-        private static String[] dexPaths() {
-            String bootClassPath = System.getProperty("java.boot.class.path", "");
-            String classPath = System.getProperty("java.class.path", "");
-            if (bootClassPath.isEmpty()) return classPath.split(":");
-            if (classPath.isEmpty()) return bootClassPath.split(":");
-            return (bootClassPath + ':' + classPath).split(":");
-        }
-    }
-
     private static final class Offsets {
-        private final long fieldAccessFlagsOffset;
-        private final long fieldArtFieldIndexOffset;
         private final long fieldDeclaringClassOffset;
-        private final long fieldOffsetOffset;
         private final long fieldTypeOffset;
 
-        private Offsets(long fieldAccessFlagsOffset, long fieldArtFieldIndexOffset,
-                        long fieldDeclaringClassOffset, long fieldOffsetOffset,
-                        long fieldTypeOffset) {
-            this.fieldAccessFlagsOffset = fieldAccessFlagsOffset;
-            this.fieldArtFieldIndexOffset = fieldArtFieldIndexOffset;
+        private Offsets(long fieldDeclaringClassOffset, long fieldTypeOffset) {
             this.fieldDeclaringClassOffset = fieldDeclaringClassOffset;
-            this.fieldOffsetOffset = fieldOffsetOffset;
             this.fieldTypeOffset = fieldTypeOffset;
         }
-    }
-
-    private static final class ReferenceHolder {
-        private Object value;
     }
 }
