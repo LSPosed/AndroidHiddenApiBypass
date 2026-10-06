@@ -339,6 +339,28 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getInstanceFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
+        List<Field> fields = getFieldsWithProperty(clazz, false);
+        if (fields != null) return fields;
+        return getInstanceFieldsFromArt(clazz);
+    }
+
+    @Nullable
+    private static List<Field> getFieldsWithProperty(@NonNull Class<?> clazz, boolean wantStatic) {
+        try {
+            var fields = LSPass.getDeclaredFields(clazz);
+            List<Field> list = new ArrayList<>(fields.size());
+            for (Field field : fields) {
+                if (Modifier.isStatic(field.getModifiers()) == wantStatic) list.add(field);
+            }
+            return list;
+        } catch (RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to read fields with Property", e);
+            return null;
+        }
+    }
+
+    @NonNull
+    private static List<Field> getInstanceFieldsFromArt(@NonNull Class<?> clazz) {
         MethodHandle mh;
         try {
             Field fI = Helper.NeverCall.class.getDeclaredField("i");
@@ -373,6 +395,13 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
+        List<Field> fields = getFieldsWithProperty(clazz, true);
+        if (fields != null) return fields;
+        return getStaticFieldsFromArt(clazz);
+    }
+
+    @NonNull
+    private static List<Field> getStaticFieldsFromArt(@NonNull Class<?> clazz) {
         MethodHandle mh;
         try {
             Field fS = Helper.NeverCall.class.getDeclaredField("s");
