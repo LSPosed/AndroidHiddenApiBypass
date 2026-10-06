@@ -39,6 +39,13 @@ prop() {
     "$adb" -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
 }
 
+# The drop box lives in /data/system/dropbox, is only readable by root, and its service dies with
+# system_server, so it has to be copied as files. User builds refuse this and fall back to dumpsys.
+enable_root_adb() {
+    "$adb" -s "$serial" root >/dev/null 2>&1 || true
+    "$adb" -s "$serial" wait-for-device >/dev/null 2>&1 || true
+}
+
 services_up() {
     "$adb" -s "$serial" shell cmd package list packages >/dev/null 2>&1 &&
         "$adb" -s "$serial" shell am get-current-user >/dev/null 2>&1
@@ -89,9 +96,11 @@ wait_for_ready() {
     return 1
 }
 
-# capture_state <name>: dmesg and boot state, which logcat does not carry.
+# capture_state <name>: dmesg, boot state and the drop box, which logcat does not carry. The drop
+# box holds the watchdog and tombstone reports for a dead system_server, and both the reboot and the
+# `-read-only` AVD take them away.
 capture_state() {
-    file="$diagnostics/framework-$1.txt"
+    name="$1"
     mkdir -p "$diagnostics"
     {
         echo "=== adb devices ==="
@@ -101,14 +110,25 @@ capture_state() {
         prop sys.user.0.ce_available
         echo "=== dmesg (tail) ==="
         "$adb" -s "$serial" shell dmesg | tail -n 500
-    } > "$file" 2>&1 || true
-    printf '%s\n' "$file"
+    } > "$diagnostics/framework-$name.txt" 2>&1 || true
+    rm -rf "$diagnostics/dropbox"
+    # Not `adb shell ... | tar`: adb shell allocates a pty, which mangles the binary stream.
+    "$adb" -s "$serial" pull /data/system/dropbox "$diagnostics/dropbox" >> "$diagnostics/dropbox-$name.txt" 2>&1 || true
+    "$adb" -s "$serial" shell dumpsys dropbox >> "$diagnostics/dropbox-$name.txt" 2>&1 || true
 }
 
 report_crash_evidence() {
-    echo "::warning::crash evidence ($logcat_full, $1):"
+    slug="$1"
+    dropbox="$diagnostics/dropbox"
+    echo "::warning::crash evidence ($logcat_full, $dropbox, $diagnostics/dropbox-$slug.txt):"
     grep -Ei 'FATAL EXCEPTION|beginning of crash|lowmemorykiller|lmkd|out of memory|SIGKILL|Watchdog|system_server|RescueParty' "$logcat_full" |
         tail -n 25 || true
+    if [ -d "$dropbox" ]; then
+        echo "::warning::newest drop box entries:"
+        ls -t "$dropbox" | head -n 10 || true
+        grep -rlE 'WATCHDOG KILLING|system_server_watchdog|native crash|native_crash|SYSTEM_TOMBSTONE|SYSTEM_RESTART|ANR in' "$dropbox" 2>/dev/null |
+            tail -n 5 || true
+    fi
     echo "::warning::last logcat lines before the reboot:"
     tail -n 15 "$logcat_full" || true
 }
@@ -118,6 +138,7 @@ reboot_guest() {
     stop_logcat
     "$adb" -s "$serial" reboot >/dev/null 2>&1 || true
     "$adb" -s "$serial" wait-for-device >/dev/null 2>&1 || true
+    enable_root_adb
     start_logcat
 }
 
@@ -147,11 +168,13 @@ run_phase() {
     else
         echo "::warning::$label: not ready (boot_completed=$(prop sys.boot_completed) ce_available=$(prop sys.user.0.ce_available))"
     fi
-    report_crash_evidence "$(capture_state "$slug")"
+    capture_state "$slug"
+    report_crash_evidence "$slug"
     reboot_guest
     return 1
 }
 
+enable_root_adb
 start_logcat
 round=0
 while [ "$round" -lt "$rounds" ]; do
