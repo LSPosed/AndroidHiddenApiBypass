@@ -65,7 +65,7 @@ final class FieldHandleBypass {
         this.unsafe = unsafe;
         this.classFieldsOffset = classFieldsOffset;
 
-        Offsets offsets = readOffsets(unsafe);
+        Offsets offsets = readOffsetsClassLoader(unsafe);
         fieldDeclaringClassOffset = offsets.fieldDeclaringClassOffset;
         fieldTypeOffset = offsets.fieldTypeOffset;
     }
@@ -204,20 +204,6 @@ final class FieldHandleBypass {
             return path.endsWith(".apk")
                     || path.endsWith(".jar")
                     || path.endsWith(".dex");
-        }
-    }
-
-    private static Offsets readOffsets(Unsafe unsafe) throws ReflectiveOperationException {
-        try {
-            DexFieldLayout scanner = new DexFieldLayout().want(DexFieldLayout.FIELD);
-            scanner.scanPath(CoreOjClassLoader.getCoreOjPath());
-
-            DexFieldLayout.Layout field = scanner.layoutOf(DexFieldLayout.FIELD);
-            return new Offsets(
-                    field.offsetOf("declaringClass"),
-                    field.offsetOf("type"));
-        } catch (IOException | ReflectiveOperationException | RuntimeException e) {
-            return readOffsetsClassLoader(unsafe);
         }
     }
 
