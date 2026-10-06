@@ -46,10 +46,20 @@ clear_test_package() {
   return 1
 }
 
+install_test_package() {
+  for attempt in {1..30}; do
+    wait_for_package_service
+    if adb install --no-streaming -r -t "$test_apk"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
 adb uninstall "$test_package" || true
-adb install --no-streaming -r -t "$test_apk"
-wait_for_package_service
+install_test_package
 clear_test_package
 run_instrumentation cold
