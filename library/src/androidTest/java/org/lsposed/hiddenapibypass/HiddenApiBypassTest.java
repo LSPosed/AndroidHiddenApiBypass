@@ -10,9 +10,11 @@ import static org.junit.Assume.assumeTrue;
 import android.content.pm.ApplicationInfo;
 import android.graphics.drawable.ClipDrawable;
 import android.os.Build;
+import android.os.Bundle;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SdkSuppress;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -24,8 +26,13 @@ import org.junit.runners.MethodSorters;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @SuppressWarnings("JavaReflectionMemberAccess")
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -46,6 +53,9 @@ public class HiddenApiBypassTest {
             {"android.app.ActivityOptions", "mPackageName"},
             {"android.app.ActivityOptions", "mHeight"},
             {"android.app.ActivityOptions", "mWidth"},
+            {"android.animation.PropertyValuesHolder", "mAnimatedValue"},
+            {"android.animation.PropertyValuesHolder", "mValueType"},
+            {"android.animation.TypeConverter", "mToClass"},
             {"android.app.ActivityThread", "sCurrentActivityThread"},
             {"android.app.ActivityThread", "mInitialApplication"},
             {"android.app.ActivityThread", "mBoundApplication"},
@@ -140,6 +150,50 @@ public class HiddenApiBypassTest {
     }
 
     @Test
+    public void ItestAllFieldsFromHiddenApiCsv() throws IOException {
+        Bundle args = InstrumentationRegistry.getArguments();
+        String csv = args.getString("hiddenapiCsv");
+        assumeTrue(csv != null && !csv.isEmpty());
+
+        int classes = 0;
+        int fields = 0;
+        int skippedClasses = 0;
+        int missingFields = 0;
+        StringBuilder missing = new StringBuilder();
+
+        String currentClass = null;
+        Set<String> currentFields = new HashSet<>();
+        try (var reader = new BufferedReader(new FileReader(csv))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                var field = parseHiddenApiField(line);
+                if (field == null) continue;
+                if (currentClass != null && !currentClass.equals(field[0])) {
+                    var result = checkHiddenApiFields(currentClass, currentFields, missing);
+                    classes++;
+                    fields += currentFields.size();
+                    if (result < 0) skippedClasses++;
+                    else missingFields += result;
+                    currentFields.clear();
+                }
+                currentClass = field[0];
+                currentFields.add(field[1]);
+            }
+        }
+        if (currentClass != null) {
+            var result = checkHiddenApiFields(currentClass, currentFields, missing);
+            classes++;
+            fields += currentFields.size();
+            if (result < 0) skippedClasses++;
+            else missingFields += result;
+        }
+
+        assertTrue("classes=" + classes + ", fields=" + fields
+                + ", skippedClasses=" + skippedClasses
+                + ", missingFields=" + missingFields + "\n" + missing, missingFields == 0);
+    }
+
+    @Test
     public void IinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         assertNotEquals(HiddenApiBypass.getDeclaredMethod(ApplicationInfo.class, "getHiddenApiEnforcementPolicy"), null);
         HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "getHiddenApiEnforcementPolicy");
@@ -203,6 +257,47 @@ public class HiddenApiBypassTest {
             if (field.getName().equals(name)) return true;
         }
         return false;
+    }
+
+    private static int checkHiddenApiFields(String className, Set<String> expectedFields,
+                                            StringBuilder missing) {
+        Class<?> clazz;
+        try {
+            clazz = Class.forName(className, false, null);
+        } catch (ClassNotFoundException | LinkageError e) {
+            return -1;
+        }
+
+        Set<String> foundFields = new HashSet<>();
+        for (var field : HiddenApiBypass.getInstanceFields(clazz)) {
+            foundFields.add(field.getName());
+        }
+        for (var field : HiddenApiBypass.getStaticFields(clazz)) {
+            foundFields.add(field.getName());
+        }
+
+        int missingFields = 0;
+        for (String field : expectedFields) {
+            if (foundFields.contains(field)) continue;
+            missingFields++;
+            if (missing.length() < 4096) {
+                missing.append(className).append('.').append(field).append('\n');
+            }
+        }
+        return missingFields;
+    }
+
+    private static String[] parseHiddenApiField(String line) {
+        int arrow = line.indexOf("->");
+        if (arrow <= 1 || line.charAt(0) != 'L') return null;
+        int colon = line.indexOf(':', arrow + 2);
+        if (colon < 0) return null;
+        int paren = line.indexOf('(', arrow + 2);
+        if (paren >= 0 && paren < colon) return null;
+        String descriptor = line.substring(0, arrow);
+        if (!descriptor.endsWith(";")) return null;
+        String name = line.substring(arrow + 2, colon);
+        return new String[]{descriptor.substring(1, descriptor.length() - 1).replace('/', '.'), name};
     }
 
 }

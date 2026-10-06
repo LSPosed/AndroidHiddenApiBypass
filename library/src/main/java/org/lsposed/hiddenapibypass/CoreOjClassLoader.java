@@ -12,6 +12,8 @@ import dalvik.system.PathClassLoader;
 
 @RequiresApi(Build.VERSION_CODES.P)
 final class CoreOjClassLoader extends PathClassLoader {
+    private final boolean useHelperStubs;
+
     static String getBootClassPath() {
         String bootClassPath = System.getProperty("java.boot.class.path", "");
         assert bootClassPath != null;
@@ -23,15 +25,20 @@ final class CoreOjClassLoader extends PathClassLoader {
     }
 
     CoreOjClassLoader() {
-        this(getCoreOjPath());
+        this(getCoreOjPath(), null, true);
     }
 
     CoreOjClassLoader(String path) {
-        this(path, null);
+        this(path, null, true);
     }
 
     CoreOjClassLoader(String path, ClassLoader parent) {
+        this(path, parent, false);
+    }
+
+    private CoreOjClassLoader(String path, ClassLoader parent, boolean useHelperStubs) {
         super(path, parent);
+        this.useHelperStubs = useHelperStubs;
     }
 
     @Override
@@ -43,6 +50,9 @@ final class CoreOjClassLoader extends PathClassLoader {
             return findClass(name);
         } catch (ClassNotFoundException ignored) {
             // no class file in jar before art moved to apex.
+        }
+        if (!useHelperStubs) {
+            return super.loadClass(name);
         }
         if (Executable.class.getName().equals(name)) {
             return Helper.Executable.class;

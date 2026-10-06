@@ -382,11 +382,6 @@ public final class HiddenApiBypass {
 
     private static Class<?> loadCloneClass(Class<?> clazz) throws ClassNotFoundException {
         String className = clazz.getName();
-        try {
-            Class<?> clonedClass = bootClassloader.loadClass(className);
-            if (clonedClass != clazz) return clonedClass;
-        } catch (ClassNotFoundException ignored) {
-        }
         for (String path : getFieldClassLoaderPaths()) {
             try {
                 Class<?> clonedClass = getFieldClassLoader(path).loadClass(className);
