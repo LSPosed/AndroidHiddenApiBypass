@@ -64,7 +64,7 @@ public class Helper {
 
     public static void enableOffsetCache(Context context) {
         if (cacheFile != null) return;
-        cacheFile = new File(context.getCacheDir(), "HiddenApiBypass");
+        cacheFile = new File(context.getFilesDir(), "HiddenApiBypass");
         artVersion = getArtVersion(context);
 
         try (var fis = new FileInputStream(cacheFile);
