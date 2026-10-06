@@ -104,7 +104,7 @@ jobs:
             target: google_apis
             arch: x86_64
           - api-level: '37.1'
-            target: android-desktop
+            target: google_apis_ps16k
             arch: x86_64
           - api-level: '37.2'
             target: google_apis_ps16k
