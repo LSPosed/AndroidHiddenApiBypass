@@ -6,6 +6,7 @@ import androidx.annotation.RequiresApi;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Executable;
+import java.lang.reflect.Field;
 
 import dalvik.system.PathClassLoader;
 
@@ -37,6 +38,8 @@ final class CoreOjClassLoader extends PathClassLoader {
             return Helper.MethodHandle.class;
         } else if (Class.class.getName().equals(name)) {
             return Helper.Class.class;
+        } else if (Field.class.getName().equals(name)) {
+            return Helper.Field.class;
         }
         return super.loadClass(name);
     }

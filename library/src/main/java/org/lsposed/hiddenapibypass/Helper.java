@@ -171,6 +171,49 @@ public class Helper {
         private int accessFlags;
     }
 
+    static final public class Field extends AccessibleObject {
+        private int accessFlags;
+        private Class declaringClass;
+        private int artFieldIndex;
+        private int offset;
+        private Class type;
+    }
+
+    public static class FieldBridge {
+        public int i;
+        public int j;
+        public int f00;
+        public int f01;
+        public int f02;
+        public int f03;
+        public int f04;
+        public int f05;
+        public int f06;
+        public int f07;
+        public int f08;
+        public int f09;
+        public int f10;
+        public int f11;
+        public int f12;
+        public int f13;
+        public int f14;
+        public int f15;
+        public int f16;
+        public int f17;
+        public int f18;
+        public int f19;
+        public int f20;
+        public int f21;
+        public int f22;
+        public int f23;
+        public int f24;
+        public int f25;
+        public int f26;
+        public int f27;
+        public int f28;
+        public int f29;
+    }
+
     @SuppressWarnings("EmptyMethod")
     public static class NeverCall {
         private static void a() {

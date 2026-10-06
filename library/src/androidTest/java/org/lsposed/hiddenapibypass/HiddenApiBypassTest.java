@@ -93,12 +93,20 @@ public class HiddenApiBypassTest {
 
     @Test
     public void GtestGetInstanceFields() {
-        assertTrue(HiddenApiBypass.getInstanceFields(ApplicationInfo.class).stream().anyMatch(i -> i.getName().equals("longVersionCode")));
+        var field = HiddenApiBypass.getInstanceFields(ApplicationInfo.class).stream()
+                .filter(i -> i.getName().equals("longVersionCode"))
+                .findFirst();
+        assertTrue(field.isPresent());
+        assertSame(long.class, field.get().getType());
     }
 
     @Test
     public void HtestGetStaticFields() {
-        assertTrue(HiddenApiBypass.getStaticFields(ApplicationInfo.class).stream().anyMatch(i -> i.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT")));
+        var field = HiddenApiBypass.getStaticFields(ApplicationInfo.class).stream()
+                .filter(i -> i.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT"))
+                .findFirst();
+        assertTrue(field.isPresent());
+        assertSame(int.class, field.get().getType());
     }
 
     @Test

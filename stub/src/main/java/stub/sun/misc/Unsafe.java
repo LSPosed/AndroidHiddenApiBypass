@@ -14,6 +14,10 @@ public class Unsafe {
     public native int addressSize();
     public native int getInt(long address);
     public native long getLong(long address);
+    public native void putInt(long address, int x);
+    public native void putLong(long address, long x);
+    public native long allocateMemory(long bytes);
+    public native void freeMemory(long address);
     public int arrayBaseOffset(Class clazz) {
         throw new RuntimeException("Stub!");
     }

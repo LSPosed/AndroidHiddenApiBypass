@@ -57,6 +57,7 @@ public final class HiddenApiBypass {
     private static final long artMethodBias;
     private static final long artFieldSize;
     private static final long artFieldBias;
+    private static final long artFieldAccessFlagsOffset;
 
     static {
         try {
@@ -80,6 +81,7 @@ public final class HiddenApiBypass {
             artMethodBias = dataRT[1];
             artFieldSize = dataRT[2];
             artFieldBias = dataRT[3];
+            artFieldAccessFlagsOffset = dataRT[4];
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
@@ -157,12 +159,16 @@ public final class HiddenApiBypass {
 
         Field fI = Helper.NeverCall.class.getDeclaredField("i");
         Field fJ = Helper.NeverCall.class.getDeclaredField("j");
+        Field fS = Helper.NeverCall.class.getDeclaredField("s");
         fI.setAccessible(true);
         fJ.setAccessible(true);
+        fS.setAccessible(true);
         MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
         MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
+        MethodHandle mhS = MethodHandles.lookup().unreflectGetter(fS);
         long iAddr = unsafe.getLong(mhI, artOffset);
         long jAddr = unsafe.getLong(mhJ, artOffset);
+        long sAddr = unsafe.getLong(mhS, artOffset);
         long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
         var artFieldSize = jAddr - iAddr;
         if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
@@ -170,12 +176,22 @@ public final class HiddenApiBypass {
                 Long.toString(jAddr, 16) + ", " +
                 Long.toString(iFields, 16));
         var artFieldBias = iAddr - iFields;
+        var artFieldAccessFlagsOffset = -1L;
+        for (long offset = 0; offset < artFieldSize; offset += 4) {
+            if ((unsafe.getInt(iAddr + offset) & 0xffff) == fI.getModifiers()
+                    && (unsafe.getInt(sAddr + offset) & 0xffff) == fS.getModifiers()) {
+                artFieldAccessFlagsOffset = offset;
+                break;
+            }
+        }
+        if (artFieldAccessFlagsOffset < 0) throw new NoSuchFieldException("ArtField.access_flags_");
 
-        long[] data = new long[4];
+        long[] data = new long[5];
         data[0] = artMethodSize;
         data[1] = artMethodBias;
         data[2] = artFieldSize;
         data[3] = artFieldBias;
+        data[4] = artFieldAccessFlagsOffset;
         return data;
     }
 
@@ -339,9 +355,11 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getInstanceFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
-        List<Field> fields = getFieldsWithProperty(clazz, false);
+        List<Field> fields = getFieldsFromArt(clazz, false);
         if (fields != null) return fields;
-        return getInstanceFieldsFromArt(clazz);
+        fields = getFieldsWithProperty(clazz, false);
+        if (fields != null) return fields;
+        return List.of();
     }
 
     @Nullable
@@ -359,29 +377,35 @@ public final class HiddenApiBypass {
         }
     }
 
-    @NonNull
-    private static List<Field> getInstanceFieldsFromArt(@NonNull Class<?> clazz) {
-        MethodHandle mh;
+    @Nullable
+    private static List<Field> getFieldsFromArt(@NonNull Class<?> clazz, boolean wantStatic) {
+        if (iFieldOffset != sFieldOffset) return null;
+        FieldHandleBypass resolver;
         try {
-            Field fI = Helper.NeverCall.class.getDeclaredField("i");
-            fI.setAccessible(true);
-            mh = MethodHandles.lookup().unreflectGetter(fI);
-        } catch (IllegalAccessException | NoSuchFieldException e) {
-            return List.of();
+            resolver = FieldHandleBypass.get(unsafe, artOffset, iFieldOffset, artFieldSize,
+                    artFieldBias, artFieldAccessFlagsOffset);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to initialize field handle resolver", e);
+            return null;
         }
-        long fields = unsafe.getLong(clazz, iFieldOffset);
-        if (fields == 0) return List.of();
-        int numFields = unsafe.getInt(fields);
-        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
-        List<Field> list = new ArrayList<>(numFields);
-        for (int i = 0; i < numFields; i++) {
-            long field = fields + i * artFieldSize + artFieldBias;
-            unsafe.putLong(mh, artOffset, field);
-            Field member = MethodHandles.reflectAs(Field.class, mh);
-            if (BuildConfig.DEBUG)
+        List<Field> fields;
+        try {
+            fields = resolver.reflect(clazz);
+        } catch (IOException | ReflectiveOperationException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields", e);
+            return null;
+        }
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + fields.size() + " fields");
+        List<Field> list = new ArrayList<>(fields.size());
+        for (Field member : fields) {
+            if (member.getDeclaringClass() != clazz) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "Materialized field from wrong class: " + member);
+                return null;
+            }
+            if (BuildConfig.DEBUG) {
                 Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
-            if (!Modifier.isStatic(member.getModifiers()))
-                list.add(member);
+            }
+            if (Modifier.isStatic(member.getModifiers()) == wantStatic) list.add(member);
         }
         return list;
     }
@@ -395,36 +419,11 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
-        List<Field> fields = getFieldsWithProperty(clazz, true);
+        List<Field> fields = getFieldsFromArt(clazz, true);
         if (fields != null) return fields;
-        return getStaticFieldsFromArt(clazz);
-    }
-
-    @NonNull
-    private static List<Field> getStaticFieldsFromArt(@NonNull Class<?> clazz) {
-        MethodHandle mh;
-        try {
-            Field fS = Helper.NeverCall.class.getDeclaredField("s");
-            fS.setAccessible(true);
-            mh = MethodHandles.lookup().unreflectGetter(fS);
-        } catch (IllegalAccessException | NoSuchFieldException e) {
-            return List.of();
-        }
-        long fields = unsafe.getLong(clazz, sFieldOffset);
-        if (fields == 0) return List.of();
-        int numFields = unsafe.getInt(fields);
-        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
-        List<Field> list = new ArrayList<>(numFields);
-        for (int i = 0; i < numFields; i++) {
-            long field = fields + i * artFieldSize + artFieldBias;
-            unsafe.putLong(mh, artOffset, field);
-            Field member = MethodHandles.reflectAs(Field.class, mh);
-            if (BuildConfig.DEBUG)
-                Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
-            if (Modifier.isStatic(member.getModifiers()))
-                list.add(member);
-        }
-        return list;
+        fields = getFieldsWithProperty(clazz, true);
+        if (fields != null) return fields;
+        return List.of();
     }
 
     /**

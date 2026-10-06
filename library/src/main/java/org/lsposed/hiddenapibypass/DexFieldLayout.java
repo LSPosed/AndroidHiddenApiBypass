@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Executable;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -35,8 +36,10 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.zip.ZipException;
 
 @RequiresApi(Build.VERSION_CODES.P)
@@ -45,12 +48,26 @@ final class DexFieldLayout {
     static final String CLASS = descriptorString(Class.class);
     static final String ACCESSIBLE_OBJECT = descriptorString(AccessibleObject.class);
     static final String EXECUTABLE = descriptorString(Executable.class);
+    static final String FIELD = descriptorString(Field.class);
     static final String METHOD_HANDLE = descriptorString(MethodHandle.class);
     private static final int OBJECT_HEADER_SIZE = 8;
     private static final int REFERENCE_SIZE = 4;
 
+    private final Set<String> wantedDescriptors = new HashSet<>();
     private final Map<String, DexClass> classes = new HashMap<>();
     private final Map<String, Layout> layouts = new HashMap<>();
+
+    DexFieldLayout() {
+        want(CLASS);
+        want(ACCESSIBLE_OBJECT);
+        want(EXECUTABLE);
+        want(METHOD_HANDLE);
+    }
+
+    DexFieldLayout want(String descriptor) {
+        wantedDescriptors.add(descriptor);
+        return this;
+    }
 
     void scanPath(String path) throws IOException {
         if (path.isEmpty()) return;
@@ -65,17 +82,45 @@ final class DexFieldLayout {
             for (int i = 1; !hasAllClasses(); ++i) {
                 var dex = zipReader.getEntry(i == 1 ? "classes.dex" : "classes" + i + ".dex");
                 if (dex == null) break;
-                new DexReader(dex).scan(classes);
+                new DexReader(dex).scan(classes, wantedDescriptors);
             }
             SharedMemory.unmap(mapped);
         }
     }
 
+    static Map<String, String> findDeclaredFieldTypes(String path, String descriptor)
+            throws IOException {
+        if (path.isEmpty()) return null;
+        var file = Paths.get(path);
+        if (!Files.isRegularFile(file)) return null;
+
+        try (var channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            long size = channel.size();
+            var mapped = channel.map(FileChannel.MapMode.READ_ONLY, 0, size);
+            mapped.order(ByteOrder.LITTLE_ENDIAN);
+            try {
+                if (mapped.limit() >= 0x70 && mapped.getInt(0) == 0x0a786564) {
+                    return new DexReader(mapped).findDeclaredFieldTypes(descriptor);
+                }
+                var zipReader = new ZipReader(mapped);
+                for (int i = 1; ; ++i) {
+                    var dex = zipReader.getEntry(i == 1 ? "classes.dex" : "classes" + i + ".dex");
+                    if (dex == null) return null;
+                    Map<String, String> fields = new DexReader(dex)
+                            .findDeclaredFieldTypes(descriptor);
+                    if (fields != null) return fields;
+                }
+            } finally {
+                SharedMemory.unmap(mapped);
+            }
+        }
+    }
+
     private boolean hasAllClasses() {
-        return classes.containsKey(CLASS)
-                && classes.containsKey(ACCESSIBLE_OBJECT)
-                && classes.containsKey(EXECUTABLE)
-                && classes.containsKey(METHOD_HANDLE);
+        for (String descriptor : wantedDescriptors) {
+            if (!classes.containsKey(descriptor)) return false;
+        }
+        return true;
     }
 
     private static String descriptorString(Class<?> clazz) {
@@ -356,12 +401,11 @@ final class DexFieldLayout {
             classDefsOff = readInt(0x64);
         }
 
-        private void scan(Map<String, DexClass> classes) {
+        private void scan(Map<String, DexClass> classes, Set<String> wantedDescriptors) {
             Map<Integer, String> wantedTypes = new HashMap<>();
-            addWantedType(classes, wantedTypes, CLASS);
-            addWantedType(classes, wantedTypes, ACCESSIBLE_OBJECT);
-            addWantedType(classes, wantedTypes, EXECUTABLE);
-            addWantedType(classes, wantedTypes, METHOD_HANDLE);
+            for (String descriptor : wantedDescriptors) {
+                addWantedType(classes, wantedTypes, descriptor);
+            }
             if (wantedTypes.isEmpty()) return;
 
             for (int i = 0; i < classDefsSize && !wantedTypes.isEmpty(); ++i) {
@@ -373,6 +417,18 @@ final class DexFieldLayout {
                 int classDataOff = readInt(offset + 24);
                 classes.put(descriptor, new DexClass(superDescriptor, readInstanceFields(classDataOff)));
             }
+        }
+
+        private Map<String, String> findDeclaredFieldTypes(String descriptor) {
+            int classIndex = findTypeIndex(descriptor);
+            if (classIndex < 0) return null;
+
+            for (int i = 0; i < classDefsSize; ++i) {
+                int offset = classDefsOff + i * 32;
+                if (readInt(offset) != classIndex) continue;
+                return readDeclaredFieldTypes(readInt(offset + 24));
+            }
+            return null;
         }
 
         private void addWantedType(Map<String, DexClass> classes, Map<Integer, String> wantedTypes, String descriptor) {
@@ -400,6 +456,32 @@ final class DexFieldLayout {
             }
             skipMethods(position, directMethodsSize + virtualMethodsSize);
             return fields;
+        }
+
+        private Map<String, String> readDeclaredFieldTypes(int offset) {
+            Map<String, String> fields = new HashMap<>();
+            if (offset == 0) return fields;
+
+            Position position = new Position(offset);
+            int staticFieldsSize = readUleb128(position);
+            int instanceFieldsSize = readUleb128(position);
+            int directMethodsSize = readUleb128(position);
+            int virtualMethodsSize = readUleb128(position);
+
+            readFieldTypes(position, staticFieldsSize, fields);
+            readFieldTypes(position, instanceFieldsSize, fields);
+            skipMethods(position, directMethodsSize + virtualMethodsSize);
+            return fields;
+        }
+
+        private void readFieldTypes(Position position, int count, Map<String, String> fields) {
+            int fieldIndex = 0;
+            for (int i = 0; i < count; ++i) {
+                fieldIndex += readUleb128(position);
+                readUleb128(position);
+                DexField field = readField(fieldIndex);
+                fields.put(field.name, field.type);
+            }
         }
 
         private void skipFields(Position position, int count) {
