@@ -54,7 +54,7 @@ public class HiddenApiBypassTest {
         var loaded = Helper.getCachedOffsetData() != null;
         var arguments = InstrumentationRegistry.getArguments();
         var load = arguments.containsKey("load");
-        assertEquals(loaded, load);
+        assertEquals("offset cache load state", load, loaded);
     }
 
     @Test
