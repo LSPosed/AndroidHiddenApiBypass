@@ -36,7 +36,9 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import stub.dalvik.system.VMRuntime;
@@ -61,6 +63,7 @@ public final class HiddenApiBypass {
     private static final long fieldTypeOffset;
     private static final boolean instanceFieldHandleSupported;
     private static final boolean staticFieldHandleSupported;
+    private static final Map<String, ClassLoader> fieldClassLoaders = new HashMap<>();
 
     static {
         try {
@@ -124,6 +127,17 @@ public final class HiddenApiBypass {
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
+        }
+    }
+
+    private static ClassLoader getFieldClassLoader(String path) {
+        synchronized (fieldClassLoaders) {
+            ClassLoader classLoader = fieldClassLoaders.get(path);
+            if (classLoader == null) {
+                classLoader = new CoreOjClassLoader(path, HiddenApiBypass.class.getClassLoader());
+                fieldClassLoaders.put(path, classLoader);
+            }
+            return classLoader;
         }
     }
 
@@ -347,8 +361,7 @@ public final class HiddenApiBypass {
     @NonNull
     private static List<Field> getFieldsFromClassLoader(@NonNull Class<?> clazz, boolean wantStatic) {
         try {
-            Class<?> clonedClass = bootClassloader.loadClass(clazz.getName());
-            if (clonedClass == clazz) return List.of();
+            Class<?> clonedClass = loadCloneClass(clazz);
             Field[] fields = clonedClass.getDeclaredFields();
             List<Field> list = new ArrayList<>(fields.length);
             for (Field field : fields) {
@@ -364,6 +377,43 @@ public final class HiddenApiBypass {
         } catch (ClassNotFoundException | RuntimeException | LinkageError e) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with classloader", e);
             return List.of();
+        }
+    }
+
+    private static Class<?> loadCloneClass(Class<?> clazz) throws ClassNotFoundException {
+        String className = clazz.getName();
+        try {
+            Class<?> clonedClass = bootClassloader.loadClass(className);
+            if (clonedClass != clazz) return clonedClass;
+        } catch (ClassNotFoundException ignored) {
+        }
+        for (String path : getFieldClassLoaderPaths()) {
+            try {
+                Class<?> clonedClass = getFieldClassLoader(path).loadClass(className);
+                if (clonedClass != clazz) return clonedClass;
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+        throw new ClassNotFoundException(className);
+    }
+
+    private static List<String> getFieldClassLoaderPaths() {
+        String bootClassPath = CoreOjClassLoader.getBootClassPath();
+        ArrayList<String> paths = new ArrayList<>();
+        addFieldClassLoaderPath(paths, bootClassPath, "/system/framework/framework.jar");
+        for (String path : bootClassPath.split(":")) {
+            addFieldClassLoaderPath(paths, bootClassPath, path);
+        }
+        return paths;
+    }
+
+    private static void addFieldClassLoaderPath(ArrayList<String> paths, String bootClassPath, String path) {
+        if (path.isEmpty() || paths.contains(path)) return;
+        if (bootClassPath.equals(path)
+                || bootClassPath.startsWith(path + ":")
+                || bootClassPath.endsWith(":" + path)
+                || bootClassPath.contains(":" + path + ":")) {
+            paths.add(path);
         }
     }
 

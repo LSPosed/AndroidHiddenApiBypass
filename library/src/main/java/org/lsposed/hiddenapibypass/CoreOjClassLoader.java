@@ -12,14 +12,26 @@ import dalvik.system.PathClassLoader;
 
 @RequiresApi(Build.VERSION_CODES.P)
 final class CoreOjClassLoader extends PathClassLoader {
-    private static String getCoreOjPath() {
+    static String getBootClassPath() {
         String bootClassPath = System.getProperty("java.boot.class.path", "");
         assert bootClassPath != null;
         return bootClassPath;
     }
 
+    private static String getCoreOjPath() {
+        return getBootClassPath().split(":", 2)[0];
+    }
+
     CoreOjClassLoader() {
-        super(getCoreOjPath(), null);
+        this(getCoreOjPath());
+    }
+
+    CoreOjClassLoader(String path) {
+        this(path, null);
+    }
+
+    CoreOjClassLoader(String path, ClassLoader parent) {
+        super(path, parent);
     }
 
     @Override

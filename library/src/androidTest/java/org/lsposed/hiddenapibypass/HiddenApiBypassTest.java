@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
 
 import java.lang.reflect.Executable;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Optional;
@@ -32,6 +33,13 @@ import java.util.Optional;
 public class HiddenApiBypassTest {
 
     private final Class<?> runtime = Class.forName("dalvik.system.VMRuntime");
+    private static final String[][] HIDDEN_API_FIELDS = {
+            {"android.content.pm.ApplicationInfo", "longVersionCode"},
+            {"android.content.pm.ApplicationInfo", "HIDDEN_API_ENFORCEMENT_DEFAULT"},
+            {"android.os.Message", "flags"},
+            {"android.os.UserHandle", "PER_USER_RANGE"},
+            {"android.os.UserHandle", "mHandle"},
+    };
 
     @Rule
     public ExpectedException exception = ExpectedException.none();
@@ -81,6 +89,16 @@ public class HiddenApiBypassTest {
     @Test
     public void HtestGetStaticFields() {
         assertTrue(HiddenApiBypass.getStaticFields(ApplicationInfo.class).stream().anyMatch(i -> i.getName().equals("HIDDEN_API_ENFORCEMENT_DEFAULT")));
+    }
+
+    @Test
+    public void ItestFieldsFromHiddenApiList() throws ClassNotFoundException {
+        for (var hiddenField : HIDDEN_API_FIELDS) {
+            Class<?> clazz = Class.forName(hiddenField[0]);
+            boolean found = containsField(HiddenApiBypass.getInstanceFields(clazz), hiddenField[1])
+                    || containsField(HiddenApiBypass.getStaticFields(clazz), hiddenField[1]);
+            assertTrue(hiddenField[0] + "." + hiddenField[1], found);
+        }
     }
 
     @Test
@@ -140,6 +158,13 @@ public class HiddenApiBypassTest {
         assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{Object.class}, new Object[]{new X()}));
         assertFalse(Helper.checkArgsForInvokeMethod(new Class[]{X.class}, new Object[]{new Object()}));
         assertTrue(Helper.checkArgsForInvokeMethod(new Class[]{Object.class, int.class, byte.class, short.class, char.class, double.class, float.class, boolean.class, long.class}, new Object[]{new X(), 1, (byte) 0, (short) 2, 'c', 1.1, 1.2f, false, 114514L}));
+    }
+
+    private static boolean containsField(List<Field> fields, String name) {
+        for (var field : fields) {
+            if (field.getName().equals(name)) return true;
+        }
+        return false;
     }
 
 }
