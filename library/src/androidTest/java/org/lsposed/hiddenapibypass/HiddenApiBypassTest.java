@@ -2,7 +2,6 @@ package org.lsposed.hiddenapibypass;
 
 import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
@@ -47,14 +46,6 @@ public class HiddenApiBypassTest {
     public static void setUp() {
         var context = InstrumentationRegistry.getInstrumentation().getContext();
         Helper.enableOffsetCache(context);
-    }
-
-    @Test
-    public void AAtestCachedDataLoaded() {
-        var loaded = Helper.getCachedOffsetData() != null;
-        var arguments = InstrumentationRegistry.getArguments();
-        var load = arguments.containsKey("load");
-        assertEquals(loaded, load);
     }
 
     @Test
@@ -169,7 +160,7 @@ public class HiddenApiBypassTest {
     }
 
     @Test
-    public void PtestCachedOffset() {
+    public void PtestCachedOffset() throws ReflectiveOperationException {
         var context = InstrumentationRegistry.getInstrumentation().getContext();
         var artVersion = Helper.getArtVersion(context);
         var isNew = artVersion >= 36_00_00000L;
@@ -181,6 +172,18 @@ public class HiddenApiBypassTest {
         data[4] = 40;
         data[5] = isNew ? 40 : 56;
         assertArrayEquals("art version " + artVersion, data, Helper.getCachedOffsetData());
+        resetOffsetCacheForTest();
+        Helper.enableOffsetCache(context);
+        assertArrayEquals("cached art version " + artVersion, data, Helper.getCachedOffsetData());
+    }
+
+    private static void resetOffsetCacheForTest() throws ReflectiveOperationException {
+        var cachedOffsetData = Helper.class.getDeclaredField("cachedOffsetData");
+        cachedOffsetData.setAccessible(true);
+        cachedOffsetData.set(null, null);
+        var cacheFile = Helper.class.getDeclaredField("cacheFile");
+        cacheFile.setAccessible(true);
+        cacheFile.set(null, null);
     }
 
 }

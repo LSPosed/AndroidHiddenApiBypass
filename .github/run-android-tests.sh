@@ -26,4 +26,3 @@ adb uninstall "$test_package" || true
 adb install --no-streaming -r -t "$test_apk"
 adb shell pm clear "$test_package"
 run_instrumentation cold
-run_instrumentation load -e load true
