@@ -151,7 +151,11 @@ jobs:
           script: |
             sh .github/run-tests.sh
           force-avd-creation: false
-          emulator-options: -no-snapshot -read-only -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
+          # `-gpu swiftshader_indirect` is deprecated since emulator 36.4.9 (together with guest and
+          # swangle_indirect), and on 37.3.2.0 it resolves to the gfxstream path where surfaceflinger
+          # aborts on `Assertion failed: !rcEnc->featureInfo()->hasReadColorBufferDma`. `software`
+          # is the mode the emulator documents for exactly this situation.
+          emulator-options: -no-snapshot -read-only -no-window -gpu software -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
           pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}
           disable-animations: true
           # The Google APIs images (36.1, 37.0, 37.1, 37.2, CANARY) are the ones whose system_server
