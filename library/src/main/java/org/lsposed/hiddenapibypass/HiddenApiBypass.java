@@ -58,6 +58,9 @@ public final class HiddenApiBypass {
     private static final long artFieldSize;
     private static final long artFieldBias;
     private static final long artFieldAccessFlagsOffset;
+    private static final boolean methodHandleSupported;
+    private static final boolean instanceFieldHandleSupported;
+    private static final boolean staticFieldHandleSupported;
 
     static {
         try {
@@ -82,6 +85,14 @@ public final class HiddenApiBypass {
             artFieldSize = dataRT[2];
             artFieldBias = dataRT[3];
             artFieldAccessFlagsOffset = dataRT[4];
+            methodHandleSupported = isMethodHandleSupported();
+            instanceFieldHandleSupported = isFieldHandleSupported("i", "j");
+            staticFieldHandleSupported = isFieldHandleSupported("s", "t");
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "MethodHandle support: method=" + methodHandleSupported
+                        + ", instanceField=" + instanceFieldHandleSupported
+                        + ", staticField=" + staticFieldHandleSupported);
+            }
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
@@ -195,6 +206,55 @@ public final class HiddenApiBypass {
         return data;
     }
 
+    private static boolean isMethodHandleSupported() {
+        try {
+            Method source = Helper.NeverCall.class.getDeclaredMethod("a");
+            Method target = Helper.NeverCall.class.getDeclaredMethod("b");
+            source.setAccessible(true);
+            target.setAccessible(true);
+            MethodHandle handle = MethodHandles.lookup().unreflect(source);
+            MethodHandle targetHandle = MethodHandles.lookup().unreflect(target);
+            long sourceArtMethod = unsafe.getLong(handle, artOffset);
+            long targetArtMethod = unsafe.getLong(targetHandle, artOffset);
+            try {
+                unsafe.putLong(handle, artOffset, targetArtMethod);
+                Executable reflected = MethodHandles.reflectAs(Executable.class, handle);
+                return reflected instanceof Method
+                        && reflected.getDeclaringClass() == Helper.NeverCall.class
+                        && "b".equals(reflected.getName());
+            } finally {
+                unsafe.putLong(handle, artOffset, sourceArtMethod);
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "MethodHandle method check failed", e);
+            return false;
+        }
+    }
+
+    private static boolean isFieldHandleSupported(String sourceName, String targetName) {
+        try {
+            Field source = Helper.NeverCall.class.getDeclaredField(sourceName);
+            Field target = Helper.NeverCall.class.getDeclaredField(targetName);
+            source.setAccessible(true);
+            target.setAccessible(true);
+            MethodHandle handle = MethodHandles.lookup().unreflectGetter(source);
+            MethodHandle targetHandle = MethodHandles.lookup().unreflectGetter(target);
+            long sourceArtField = unsafe.getLong(handle, artOffset);
+            long targetArtField = unsafe.getLong(targetHandle, artOffset);
+            try {
+                unsafe.putLong(handle, artOffset, targetArtField);
+                Field reflected = MethodHandles.reflectAs(Field.class, handle);
+                return reflected.getDeclaringClass() == Helper.NeverCall.class
+                        && targetName.equals(reflected.getName());
+            } finally {
+                unsafe.putLong(handle, artOffset, sourceArtField);
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "MethodHandle field check failed", e);
+            return false;
+        }
+    }
+
     /**
      * create an instance of the given class {@code clazz} calling the restricted constructor with arguments {@code args}
      *
@@ -268,6 +328,38 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Executable> getDeclaredMethods(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
+        if (methodHandleSupported) {
+            try {
+                return getDeclaredMethodsFromMethodHandle(clazz);
+            } catch (RuntimeException | LinkageError e) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize methods with MethodHandle", e);
+            }
+        }
+        List<Executable> methods = getDeclaredMethodsFromArt(clazz);
+        if (methods != null) return methods;
+        return List.of();
+    }
+
+    @Nullable
+    private static List<Executable> getDeclaredMethodsFromArt(@NonNull Class<?> clazz) {
+        MethodHandleBypass resolver;
+        try {
+            resolver = MethodHandleBypass.get(unsafe, artOffset, methodsOffset, artMethodSize,
+                    artMethodBias, methodOffset);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to initialize method handle resolver", e);
+            return null;
+        }
+        try {
+            return resolver.reflect(clazz);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize methods", e);
+            return null;
+        }
+    }
+
+    @NonNull
+    private static List<Executable> getDeclaredMethodsFromMethodHandle(@NonNull Class<?> clazz) {
         MethodHandle mh;
         try {
             Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
@@ -355,9 +447,43 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getInstanceFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
+        if (instanceFieldHandleSupported) {
+            try {
+                return getFieldsFromMethodHandle(clazz, false);
+            } catch (RuntimeException | LinkageError e) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with MethodHandle", e);
+            }
+        }
         List<Field> fields = getFieldsFromArt(clazz, false);
         if (fields != null) return fields;
         return List.of();
+    }
+
+    @NonNull
+    private static List<Field> getFieldsFromMethodHandle(@NonNull Class<?> clazz, boolean wantStatic) {
+        MethodHandle mh;
+        try {
+            Field stub = Helper.NeverCall.class.getDeclaredField(wantStatic ? "s" : "i");
+            stub.setAccessible(true);
+            mh = MethodHandles.lookup().unreflectGetter(stub);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            return List.of();
+        }
+        long fields = unsafe.getLong(clazz, wantStatic ? sFieldOffset : iFieldOffset);
+        if (fields == 0) return List.of();
+        int numFields = unsafe.getInt(fields);
+        if (BuildConfig.DEBUG) Log.d(TAG, clazz + " has " + numFields + " fields");
+        List<Field> list = new ArrayList<>(numFields);
+        for (int i = 0; i < numFields; i++) {
+            long field = fields + i * artFieldSize + artFieldBias;
+            unsafe.putLong(mh, artOffset, field);
+            Field member = MethodHandles.reflectAs(Field.class, mh);
+            if (BuildConfig.DEBUG) {
+                Log.v(TAG, "got " + member.getType() + " " + clazz.getTypeName() + "." + member.getName());
+            }
+            if (Modifier.isStatic(member.getModifiers()) == wantStatic) list.add(member);
+        }
+        return list;
     }
 
     @Nullable
@@ -402,6 +528,13 @@ public final class HiddenApiBypass {
     @NonNull
     public static List<Field> getStaticFields(@NonNull Class<?> clazz) {
         if (clazz.isPrimitive() || clazz.isArray()) return List.of();
+        if (staticFieldHandleSupported) {
+            try {
+                return getFieldsFromMethodHandle(clazz, true);
+            } catch (RuntimeException | LinkageError e) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with MethodHandle", e);
+            }
+        }
         List<Field> fields = getFieldsFromArt(clazz, true);
         if (fields != null) return fields;
         return List.of();
