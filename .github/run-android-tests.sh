@@ -9,9 +9,8 @@ hiddenapi_dir=$output_dir/hiddenapi
 hiddenapi_test_class=org.lsposed.hiddenapibypass.HiddenApiBypassTest
 device_hiddenapi_csv=/data/local/tmp/hiddenapi-flags.csv
 device_hiddenapi_present_csv=/data/local/tmp/hiddenapi-present-fields.csv
-hiddenapi_settings=(hidden_api_policy hidden_api_policy_pre_p_apps hidden_api_policy_p_apps)
-hiddenapi_original_settings=()
-hiddenapi_settings_saved=0
+device_hiddenapi_present_chunk_csv=/data/local/tmp/hiddenapi-present-fields-chunk.csv
+hiddenapi_chunk_lines="${HIDDENAPI_CHUNK_LINES:-10000}"
 
 run_instrumentation() {
   label="$1"
@@ -132,45 +131,38 @@ prepare_hiddenapi_present_csv_on_device() {
   adb shell "cat /dev/null > $device_hiddenapi_present_csv && chmod 0666 $device_hiddenapi_present_csv"
 }
 
-save_hiddenapi_settings() {
-  if [ "$hiddenapi_settings_saved" -eq 1 ]; then
-    return
-  fi
-
-  hiddenapi_original_settings=()
-  for key in "${hiddenapi_settings[@]}"; do
-    value="$(adb shell settings get global "$key" 2>/dev/null | tr -d '\r' || true)"
-    hiddenapi_original_settings+=("${value:-null}")
-  done
-  hiddenapi_settings_saved=1
+split_hiddenapi_present_csv() {
+  host_present_csv="$1"
+  chunk_dir="$2"
+  rm -rf "$chunk_dir"
+  mkdir -p "$chunk_dir"
+  awk -v outdir="$chunk_dir" -v lines="$hiddenapi_chunk_lines" '
+    NR % lines == 1 {
+      if (out) close(out)
+      out = sprintf("%s/chunk-%04d.csv", outdir, int((NR - 1) / lines))
+    }
+    { print > out }
+  ' "$host_present_csv"
 }
 
-restore_hiddenapi_settings() {
-  if [ "$hiddenapi_settings_saved" -ne 1 ]; then
-    return
-  fi
+run_hiddenapi_bypass_chunks() {
+  host_present_csv="$1"
+  chunk_dir="$hiddenapi_dir/hiddenapi-present-chunks"
+  split_hiddenapi_present_csv "$host_present_csv" "$chunk_dir"
 
-  for i in "${!hiddenapi_settings[@]}"; do
-    key="${hiddenapi_settings[$i]}"
-    value="${hiddenapi_original_settings[$i]}"
-    if [ "$value" = "null" ]; then
-      adb shell settings delete global "$key" >/dev/null 2>&1 || true
-    else
-      adb shell settings put global "$key" "$value" >/dev/null 2>&1 || true
+  chunk_index=0
+  for host_chunk in "$chunk_dir"/chunk-*.csv; do
+    if [ ! -e "$host_chunk" ]; then
+      echo "No hidden API present CSV chunks were generated." >&2
+      return 1
     fi
-  done
-}
-
-set_hiddenapi_policy_permissive() {
-  save_hiddenapi_settings
-  for key in "${hiddenapi_settings[@]}"; do
-    adb shell settings put global "$key" 1 >/dev/null
-  done
-}
-
-set_hiddenapi_policy_default() {
-  for key in "${hiddenapi_settings[@]}"; do
-    adb shell settings delete global "$key" >/dev/null 2>&1 || true
+    adb push "$host_chunk" "$device_hiddenapi_present_chunk_csv"
+    adb shell chmod 0644 "$device_hiddenapi_present_chunk_csv"
+    force_stop_test_package
+    run_instrumentation "hiddenapi-csv-bypass-$chunk_index" \
+      -e class "$hiddenapi_test_class#ItestAllFieldsFromHiddenApiCsv" \
+      -e hiddenapiCsv "$device_hiddenapi_present_chunk_csv"
+    chunk_index=$((chunk_index + 1))
   done
 }
 
@@ -187,21 +179,17 @@ run_hiddenapi_csv_ab_test() {
   copy_hiddenapi_csv_to_device "$host_csv"
   prepare_hiddenapi_present_csv_on_device
 
-  set_hiddenapi_policy_permissive
   force_stop_test_package
   run_instrumentation hiddenapi-csv-baseline \
+    --no-hidden-api-checks \
     -e class "$hiddenapi_test_class#ItestExportPresentFieldsFromHiddenApiCsv" \
     -e hiddenapiCsv "$device_hiddenapi_csv" \
     -e hiddenapiPresentCsv "$device_hiddenapi_present_csv"
 
-  set_hiddenapi_policy_default
-  force_stop_test_package
-  run_instrumentation hiddenapi-csv-bypass \
-    -e class "$hiddenapi_test_class#ItestAllFieldsFromHiddenApiCsv" \
-    -e hiddenapiCsv "$device_hiddenapi_present_csv"
+  host_present_csv="$hiddenapi_dir/hiddenapi-present-fields.csv"
+  adb pull "$device_hiddenapi_present_csv" "$host_present_csv"
+  run_hiddenapi_bypass_chunks "$host_present_csv"
 }
-
-trap restore_hiddenapi_settings EXIT
 
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
