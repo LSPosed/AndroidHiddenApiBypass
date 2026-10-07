@@ -7,7 +7,7 @@ test_apk=library/build/outputs/apk/androidTest/debug/library-debug-androidTest.a
 output_dir=library/build/outputs
 hiddenapi_dir=$output_dir/hiddenapi
 hiddenapi_test_class=org.lsposed.hiddenapibypass.HiddenApiBypassTest
-device_hiddenapi_csv=/data/data/$test_package/files/hiddenapi-flags.csv
+device_hiddenapi_csv=/data/local/tmp/hiddenapi-flags.csv
 device_hiddenapi_present_csv=/data/data/$test_package/files/hiddenapi-present-fields.csv
 hiddenapi_settings=(hidden_api_policy hidden_api_policy_pre_p_apps hidden_api_policy_p_apps)
 hiddenapi_original_settings=()
@@ -122,9 +122,10 @@ download_hiddenapi_flags_csv() {
   printf '%s\n' "$host_csv"
 }
 
-copy_hiddenapi_csv_to_test_app() {
+copy_hiddenapi_csv_to_device() {
   host_csv="$1"
-  adb shell "run-as $test_package sh -c 'mkdir -p files && cat > files/hiddenapi-flags.csv'" < "$host_csv"
+  adb push "$host_csv" "$device_hiddenapi_csv"
+  adb shell chmod 0644 "$device_hiddenapi_csv"
 }
 
 save_hiddenapi_settings() {
@@ -179,7 +180,7 @@ run_hiddenapi_csv_ab_test() {
   fi
 
   clear_test_package
-  copy_hiddenapi_csv_to_test_app "$host_csv"
+  copy_hiddenapi_csv_to_device "$host_csv"
 
   set_hiddenapi_policy_disabled
   force_stop_test_package
