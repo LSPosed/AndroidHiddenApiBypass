@@ -9,14 +9,32 @@ hiddenapi_dir=$output_dir/hiddenapi
 hiddenapi_test_class=org.lsposed.hiddenapibypass.HiddenApiBypassTest
 device_hiddenapi_csv=/data/local/tmp/hiddenapi-flags.csv
 device_hiddenapi_present_csv=/data/local/tmp/hiddenapi-present-fields.csv
-hiddenapi_settings=(hidden_api_policy hidden_api_policy_pre_p_apps hidden_api_policy_p_apps)
-hiddenapi_original_settings=()
-hiddenapi_settings_saved=0
+device_hiddenapi_present_chunk_csv=/data/local/tmp/hiddenapi-present-fields-chunk.csv
+hiddenapi_chunk_lines="${HIDDENAPI_CHUNK_LINES:-10000}"
+logcat_pid=
+
+stop_logcat_capture() {
+  if [ -n "${logcat_pid:-}" ]; then
+    kill "$logcat_pid" >/dev/null 2>&1 || true
+    wait "$logcat_pid" >/dev/null 2>&1 || true
+  fi
+}
+
+trap stop_logcat_capture EXIT
+
+start_logcat_capture() {
+  mkdir -p "$output_dir"
+  adb logcat -c >/dev/null 2>&1 || true
+  adb logcat -v threadtime > "$output_dir/guest-logcat-stream.txt" 2>&1 &
+  logcat_pid=$!
+}
 
 run_instrumentation() {
   label="$1"
   shift
   log="$output_dir/androidTest-$label.txt"
+
+  wait_for_system_services
 
   set +e
   adb shell am instrument -w "$@" "$runner" > "$log" 2>&1
@@ -34,11 +52,37 @@ wait_for_boot() {
   until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
     sleep 1
   done
+  wait_for_system_services
+}
+
+configure_navigation_mode() {
+  sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+  case "$sdk" in
+    ''|*[!0-9]*) return ;;
+  esac
+
+  if [ "$sdk" -ge 36 ]; then
+    adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 ||
+      adb shell "cmd overlay enable com.android.internal.systemui.navbar.threebutton && cmd overlay disable com.android.internal.systemui.navbar.gestural" >/dev/null 2>&1 ||
+      true
+    sleep 2
+    wait_for_system_services
+  fi
+}
+
+wait_for_system_services() {
   wait_for_package_service
+  wait_for_activity_service
 }
 
 wait_for_package_service() {
   until adb shell cmd package list packages android >/dev/null 2>&1; do
+    sleep 1
+  done
+}
+
+wait_for_activity_service() {
+  until adb shell cmd activity get-current-user >/dev/null 2>&1; do
     sleep 1
   done
 }
@@ -132,45 +176,38 @@ prepare_hiddenapi_present_csv_on_device() {
   adb shell "cat /dev/null > $device_hiddenapi_present_csv && chmod 0666 $device_hiddenapi_present_csv"
 }
 
-save_hiddenapi_settings() {
-  if [ "$hiddenapi_settings_saved" -eq 1 ]; then
-    return
-  fi
-
-  hiddenapi_original_settings=()
-  for key in "${hiddenapi_settings[@]}"; do
-    value="$(adb shell settings get global "$key" 2>/dev/null | tr -d '\r' || true)"
-    hiddenapi_original_settings+=("${value:-null}")
-  done
-  hiddenapi_settings_saved=1
+split_hiddenapi_present_csv() {
+  host_present_csv="$1"
+  chunk_dir="$2"
+  rm -rf "$chunk_dir"
+  mkdir -p "$chunk_dir"
+  awk -v outdir="$chunk_dir" -v lines="$hiddenapi_chunk_lines" '
+    NR % lines == 1 {
+      if (out) close(out)
+      out = sprintf("%s/chunk-%04d.csv", outdir, int((NR - 1) / lines))
+    }
+    { print > out }
+  ' "$host_present_csv"
 }
 
-restore_hiddenapi_settings() {
-  if [ "$hiddenapi_settings_saved" -ne 1 ]; then
-    return
-  fi
+run_hiddenapi_bypass_chunks() {
+  host_present_csv="$1"
+  chunk_dir="$hiddenapi_dir/hiddenapi-present-chunks"
+  split_hiddenapi_present_csv "$host_present_csv" "$chunk_dir"
 
-  for i in "${!hiddenapi_settings[@]}"; do
-    key="${hiddenapi_settings[$i]}"
-    value="${hiddenapi_original_settings[$i]}"
-    if [ "$value" = "null" ]; then
-      adb shell settings delete global "$key" >/dev/null 2>&1 || true
-    else
-      adb shell settings put global "$key" "$value" >/dev/null 2>&1 || true
+  chunk_index=0
+  for host_chunk in "$chunk_dir"/chunk-*.csv; do
+    if [ ! -e "$host_chunk" ]; then
+      echo "No hidden API present CSV chunks were generated." >&2
+      return 1
     fi
-  done
-}
-
-set_hiddenapi_policy_permissive() {
-  save_hiddenapi_settings
-  for key in "${hiddenapi_settings[@]}"; do
-    adb shell settings put global "$key" 1 >/dev/null
-  done
-}
-
-set_hiddenapi_policy_default() {
-  for key in "${hiddenapi_settings[@]}"; do
-    adb shell settings delete global "$key" >/dev/null 2>&1 || true
+    adb push "$host_chunk" "$device_hiddenapi_present_chunk_csv"
+    adb shell chmod 0644 "$device_hiddenapi_present_chunk_csv"
+    force_stop_test_package
+    run_instrumentation "hiddenapi-csv-bypass-$chunk_index" \
+      -e class "$hiddenapi_test_class#ItestAllFieldsFromHiddenApiCsv" \
+      -e hiddenapiCsv "$device_hiddenapi_present_chunk_csv"
+    chunk_index=$((chunk_index + 1))
   done
 }
 
@@ -187,24 +224,22 @@ run_hiddenapi_csv_ab_test() {
   copy_hiddenapi_csv_to_device "$host_csv"
   prepare_hiddenapi_present_csv_on_device
 
-  set_hiddenapi_policy_permissive
   force_stop_test_package
   run_instrumentation hiddenapi-csv-baseline \
+    --no-hidden-api-checks \
     -e class "$hiddenapi_test_class#ItestExportPresentFieldsFromHiddenApiCsv" \
     -e hiddenapiCsv "$device_hiddenapi_csv" \
     -e hiddenapiPresentCsv "$device_hiddenapi_present_csv"
 
-  set_hiddenapi_policy_default
-  force_stop_test_package
-  run_instrumentation hiddenapi-csv-bypass \
-    -e class "$hiddenapi_test_class#ItestAllFieldsFromHiddenApiCsv" \
-    -e hiddenapiCsv "$device_hiddenapi_present_csv"
+  host_present_csv="$hiddenapi_dir/hiddenapi-present-fields.csv"
+  adb pull "$device_hiddenapi_present_csv" "$host_present_csv"
+  run_hiddenapi_bypass_chunks "$host_present_csv"
 }
-
-trap restore_hiddenapi_settings EXIT
 
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
+configure_navigation_mode
+start_logcat_capture
 adb uninstall "$test_package" || true
 install_test_package
 clear_test_package

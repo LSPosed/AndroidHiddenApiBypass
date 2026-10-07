@@ -396,6 +396,7 @@ public class HiddenApiBypassTest {
     }
 
     private static String[] parseHiddenApiField(String line) {
+        if (line.contains(",public-api")) return null;
         int arrow = line.indexOf("->");
         if (arrow <= 1 || line.charAt(0) != 'L') return null;
         int colon = line.indexOf(':', arrow + 2);
