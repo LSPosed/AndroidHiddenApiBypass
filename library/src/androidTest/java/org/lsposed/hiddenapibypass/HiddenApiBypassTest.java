@@ -215,7 +215,7 @@ public class HiddenApiBypassTest {
         File outputFile = resolveHiddenApiFile(output);
         File outputDir = outputFile.getParentFile();
         if (outputDir != null) {
-            assertTrue(outputDir.mkdirs() || outputDir.isDirectory());
+            assertTrue("Cannot create " + outputDir, outputDir.mkdirs() || outputDir.isDirectory());
         }
 
         String currentClass = null;
@@ -326,7 +326,7 @@ public class HiddenApiBypassTest {
         if (file.isAbsolute()) {
             return file;
         }
-        return new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(), path);
+        return new File(InstrumentationRegistry.getInstrumentation().getContext().getFilesDir(), path);
     }
 
     private static int writePresentHiddenApiFields(String className,

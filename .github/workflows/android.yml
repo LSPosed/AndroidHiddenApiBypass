@@ -152,7 +152,7 @@ jobs:
           script: bash .github/run-android-tests.sh
           force-avd-creation: false
           emulator-options: -no-snapshot -read-only -no-window -gpu software -no-audio -no-boot-anim -camera-back none${{ matrix.target == 'google_apis_ps16k' && ' -show-kernel' || '' }}
-          pre-emulator-launch-script: ${{ matrix.target == 'google_apis_ps16k' && 'bash .github/capture-emulator-console.sh' || '' }}
+          pre-emulator-launch-script: bash .github/prepare-emulator-runner.sh ${{ matrix.target == 'google_apis_ps16k' && 'capture-console' || '' }}
           disable-animations: true
           ram-size: 4096M
           disk-size: 6000M
