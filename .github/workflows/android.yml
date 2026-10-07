@@ -48,7 +48,7 @@ jobs:
     name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.api-level == 'CANARY' }}
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -101,19 +101,24 @@ jobs:
           - api-level: '36.1'
             target: google_apis
             arch: x86_64
+            experimental: true
           - api-level: '37.0'
             target: google_apis
             arch: x86_64
+            experimental: true
           - api-level: '37.1'
             target: google_apis_ps16k
             arch: x86_64
+            experimental: true
           - api-level: '37.2'
             target: google_apis_ps16k
             arch: x86_64
+            experimental: true
           - api-level: CANARY
             system-image-api-level: '37.2'
             target: google_apis_ps16k
             arch: x86_64
+            experimental: true
     steps:
       - name: checkout
         uses: actions/checkout@v7

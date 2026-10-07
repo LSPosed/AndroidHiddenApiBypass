@@ -35,7 +35,7 @@ for attempt in $(seq 1 20); do
   if [ "$status" -eq 0 ]; then
     exit 0
   fi
-  if ! grep -q 'Broken pipe (32)' "$tmp"; then
+  if ! grep -q 'Broken pipe (32)\|Cannot broadcast before boot completed\|Can'\''t find service: input\|Can'\''t find service: settings' "$tmp"; then
     exit "$status"
   fi
   sleep 2
