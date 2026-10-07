@@ -55,6 +55,21 @@ wait_for_boot() {
   wait_for_system_services
 }
 
+configure_navigation_mode() {
+  sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+  case "$sdk" in
+    ''|*[!0-9]*) return ;;
+  esac
+
+  if [ "$sdk" -ge 36 ]; then
+    adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 ||
+      adb shell "cmd overlay enable com.android.internal.systemui.navbar.threebutton && cmd overlay disable com.android.internal.systemui.navbar.gestural" >/dev/null 2>&1 ||
+      true
+    sleep 2
+    wait_for_system_services
+  fi
+}
+
 wait_for_system_services() {
   wait_for_package_service
   wait_for_activity_service
@@ -223,6 +238,7 @@ run_hiddenapi_csv_ab_test() {
 
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
+configure_navigation_mode
 start_logcat_capture
 adb uninstall "$test_package" || true
 install_test_package
