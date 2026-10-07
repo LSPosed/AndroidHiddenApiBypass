@@ -48,7 +48,6 @@ jobs:
     name: Test on API ${{ matrix.api-level }} ${{ matrix.arch }}
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -147,6 +146,8 @@ jobs:
           large-packages: false
           preinstalled-runtimes: false
       - name: run tests
+        id: run_tests
+        continue-on-error: ${{ matrix.experimental == true }}
         uses: LSPosed/android-emulator-runner@release/v2
         with:
           api-level: ${{ matrix.api-level }}
@@ -167,7 +168,7 @@ jobs:
           GIT_CONFIG_NOSYSTEM: true
           ANDROID_API_LEVEL: ${{ matrix.api-level }}
       - name: Collect emulator diagnostics
-        if: ${{ failure() }}
+        if: ${{ failure() || steps.run_tests.outcome == 'failure' }}
         run: |
           sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
           adb="$sdk/platform-tools/adb"
@@ -192,7 +193,7 @@ jobs:
           (command -v free > /dev/null && free -m || vm_stat) > emulator-diagnostics/host-memory.txt 2>&1 || true
           df -h > emulator-diagnostics/host-disk.txt 2>&1 || true
       - name: Upload emulator diagnostics
-        if: ${{ failure() }}
+        if: ${{ failure() || steps.run_tests.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.api-level }}_${{ matrix.arch }}_emulator-diagnostics
@@ -200,7 +201,7 @@ jobs:
           if-no-files-found: warn
           compression-level: 9
       - name: Upload outputs
-        if: ${{ failure() }}
+        if: ${{ failure() || steps.run_tests.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.api-level }}_${{ matrix.arch }}_outputs
