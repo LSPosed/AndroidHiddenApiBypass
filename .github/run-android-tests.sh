@@ -17,6 +17,8 @@ run_instrumentation() {
   shift
   log="$output_dir/androidTest-$label.txt"
 
+  wait_for_system_services
+
   set +e
   adb shell am instrument -w "$@" "$runner" > "$log" 2>&1
   exit_code=$?
@@ -33,11 +35,22 @@ wait_for_boot() {
   until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
     sleep 1
   done
+  wait_for_system_services
+}
+
+wait_for_system_services() {
   wait_for_package_service
+  wait_for_activity_service
 }
 
 wait_for_package_service() {
   until adb shell cmd package list packages android >/dev/null 2>&1; do
+    sleep 1
+  done
+}
+
+wait_for_activity_service() {
+  until adb shell cmd activity get-current-user >/dev/null 2>&1; do
     sleep 1
   done
 }
