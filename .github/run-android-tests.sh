@@ -11,6 +11,23 @@ device_hiddenapi_csv=/data/local/tmp/hiddenapi-flags.csv
 device_hiddenapi_present_csv=/data/local/tmp/hiddenapi-present-fields.csv
 device_hiddenapi_present_chunk_csv=/data/local/tmp/hiddenapi-present-fields-chunk.csv
 hiddenapi_chunk_lines="${HIDDENAPI_CHUNK_LINES:-10000}"
+logcat_pid=
+
+stop_logcat_capture() {
+  if [ -n "${logcat_pid:-}" ]; then
+    kill "$logcat_pid" >/dev/null 2>&1 || true
+    wait "$logcat_pid" >/dev/null 2>&1 || true
+  fi
+}
+
+trap stop_logcat_capture EXIT
+
+start_logcat_capture() {
+  mkdir -p "$output_dir"
+  adb logcat -c >/dev/null 2>&1 || true
+  adb logcat -v threadtime > "$output_dir/guest-logcat-stream.txt" 2>&1 &
+  logcat_pid=$!
+}
 
 run_instrumentation() {
   label="$1"
@@ -206,6 +223,7 @@ run_hiddenapi_csv_ab_test() {
 
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
+start_logcat_capture
 adb uninstall "$test_package" || true
 install_test_package
 clear_test_package

@@ -160,6 +160,7 @@ jobs:
         env:
           GIT_CONFIG_NOSYSTEM: true
           ANDROID_API_LEVEL: ${{ matrix.api-level }}
+          HIDDENAPI_CHUNK_LINES: ${{ (matrix.api-level == '36.1' || matrix.api-level == '37.0' || matrix.api-level == '37.1' || matrix.api-level == '37.2' || matrix.api-level == 'CANARY') && '5000' || '10000' }}
       - name: Collect emulator diagnostics
         if: ${{ failure() }}
         run: |
@@ -174,6 +175,7 @@ jobs:
           cp -r /tmp/android-* emulator-diagnostics/ 2>/dev/null || true
           cp -r "${TMPDIR:-/tmp}"/android-* emulator-diagnostics/ 2>/dev/null || true
           cp /tmp/emulator-console.log emulator-diagnostics/ 2>/dev/null || true
+          cp library/build/outputs/guest-logcat-stream.txt emulator-diagnostics/ 2>/dev/null || true
           "$adb" devices -l > emulator-diagnostics/adb-devices.txt 2>&1 || true
           state="$("$adb" -s emulator-5554 get-state 2>&1 || true)"
           printf '%s\n' "$state" > emulator-diagnostics/guest-adb-state.txt
