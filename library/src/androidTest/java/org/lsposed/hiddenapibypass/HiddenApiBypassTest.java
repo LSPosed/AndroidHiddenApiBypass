@@ -23,14 +23,19 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -194,6 +199,59 @@ public class HiddenApiBypassTest {
     }
 
     @Test
+    public void ItestExportPresentFieldsFromHiddenApiCsv() throws IOException, NoSuchFieldException {
+        Bundle args = InstrumentationRegistry.getArguments();
+        String csv = args.getString("hiddenapiCsv");
+        String output = args.getString("hiddenapiPresentCsv");
+        assumeTrue(csv != null && !csv.isEmpty());
+        assumeTrue(output != null && !output.isEmpty());
+        assertHiddenApiPolicyDisabled();
+
+        int classes = 0;
+        int fields = 0;
+        int skippedClasses = 0;
+        int presentFields = 0;
+
+        File outputFile = new File(output);
+        File outputDir = outputFile.getParentFile();
+        if (outputDir != null) {
+            assertTrue(outputDir.mkdirs() || outputDir.isDirectory());
+        }
+
+        String currentClass = null;
+        Map<String, String> currentFields = new LinkedHashMap<>();
+        try (var reader = new BufferedReader(new FileReader(csv));
+             var writer = new BufferedWriter(new FileWriter(outputFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                var field = parseHiddenApiField(line);
+                if (field == null) continue;
+                if (currentClass != null && !currentClass.equals(field[0])) {
+                    var result = writePresentHiddenApiFields(currentClass, currentFields, writer);
+                    classes++;
+                    fields += currentFields.size();
+                    if (result < 0) skippedClasses++;
+                    else presentFields += result;
+                    currentFields.clear();
+                }
+                currentClass = field[0];
+                currentFields.put(field[1], line);
+            }
+            if (currentClass != null) {
+                var result = writePresentHiddenApiFields(currentClass, currentFields, writer);
+                classes++;
+                fields += currentFields.size();
+                if (result < 0) skippedClasses++;
+                else presentFields += result;
+            }
+        }
+
+        assertTrue("classes=" + classes + ", fields=" + fields
+                + ", skippedClasses=" + skippedClasses
+                + ", presentFields=" + presentFields, presentFields > 0);
+    }
+
+    @Test
     public void IinvokeNonSdkApiWithoutExemption() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         assertNotEquals(HiddenApiBypass.getDeclaredMethod(ApplicationInfo.class, "getHiddenApiEnforcementPolicy"), null);
         HiddenApiBypass.invoke(ApplicationInfo.class, new ApplicationInfo(), "getHiddenApiEnforcementPolicy");
@@ -259,8 +317,45 @@ public class HiddenApiBypassTest {
         return false;
     }
 
+    private static void assertHiddenApiPolicyDisabled() throws NoSuchFieldException {
+        ApplicationInfo.class.getDeclaredField("longVersionCode");
+    }
+
+    private static int writePresentHiddenApiFields(String className,
+                                                   Map<String, String> expectedFields,
+                                                   BufferedWriter writer) throws IOException {
+        if (isKnownUnsupportedFieldClass(className)) {
+            return -1;
+        }
+
+        Class<?> clazz;
+        try {
+            clazz = Class.forName(className, false, null);
+        } catch (ClassNotFoundException | LinkageError e) {
+            return -1;
+        }
+
+        Set<String> foundFields = new HashSet<>();
+        for (var field : clazz.getDeclaredFields()) {
+            foundFields.add(field.getName());
+        }
+
+        int presentFields = 0;
+        for (var field : expectedFields.entrySet()) {
+            if (!foundFields.contains(field.getKey())) continue;
+            writer.write(field.getValue());
+            writer.newLine();
+            presentFields++;
+        }
+        return presentFields;
+    }
+
     private static int checkHiddenApiFields(String className, Set<String> expectedFields,
                                             StringBuilder missing) {
+        if (isKnownUnsupportedFieldClass(className)) {
+            return -1;
+        }
+
         Class<?> clazz;
         try {
             clazz = Class.forName(className, false, null);
@@ -285,6 +380,11 @@ public class HiddenApiBypassTest {
             }
         }
         return missingFields;
+    }
+
+    private static boolean isKnownUnsupportedFieldClass(String className) {
+        return "java.lang.Object".equals(className)
+                || "java.lang.ref.FinalizerReference".equals(className);
     }
 
     private static String[] parseHiddenApiField(String line) {
