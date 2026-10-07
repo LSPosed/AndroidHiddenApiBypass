@@ -8,7 +8,7 @@ output_dir=library/build/outputs
 hiddenapi_dir=$output_dir/hiddenapi
 hiddenapi_test_class=org.lsposed.hiddenapibypass.HiddenApiBypassTest
 device_hiddenapi_csv=/data/local/tmp/hiddenapi-flags.csv
-device_hiddenapi_present_csv=/data/data/$test_package/files/hiddenapi-present-fields.csv
+device_hiddenapi_present_csv=hiddenapi-present-fields.csv
 hiddenapi_settings=(hidden_api_policy hidden_api_policy_pre_p_apps hidden_api_policy_p_apps)
 hiddenapi_original_settings=()
 hiddenapi_settings_saved=0
@@ -157,10 +157,10 @@ restore_hiddenapi_settings() {
   done
 }
 
-set_hiddenapi_policy_disabled() {
+set_hiddenapi_policy_permissive() {
   save_hiddenapi_settings
   for key in "${hiddenapi_settings[@]}"; do
-    adb shell settings put global "$key" 0 >/dev/null
+    adb shell settings put global "$key" 1 >/dev/null
   done
 }
 
@@ -182,7 +182,7 @@ run_hiddenapi_csv_ab_test() {
   clear_test_package
   copy_hiddenapi_csv_to_device "$host_csv"
 
-  set_hiddenapi_policy_disabled
+  set_hiddenapi_policy_permissive
   force_stop_test_package
   run_instrumentation hiddenapi-csv-baseline \
     -e class "$hiddenapi_test_class#ItestExportPresentFieldsFromHiddenApiCsv" \

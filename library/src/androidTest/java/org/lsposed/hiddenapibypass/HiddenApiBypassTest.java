@@ -168,7 +168,7 @@ public class HiddenApiBypassTest {
 
         String currentClass = null;
         Set<String> currentFields = new HashSet<>();
-        try (var reader = new BufferedReader(new FileReader(csv))) {
+        try (var reader = new BufferedReader(new FileReader(resolveHiddenApiFile(csv)))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 var field = parseHiddenApiField(line);
@@ -205,14 +205,14 @@ public class HiddenApiBypassTest {
         String output = args.getString("hiddenapiPresentCsv");
         assumeTrue(csv != null && !csv.isEmpty());
         assumeTrue(output != null && !output.isEmpty());
-        assertHiddenApiPolicyDisabled();
+        assertHiddenApiPolicyPermissive();
 
         int classes = 0;
         int fields = 0;
         int skippedClasses = 0;
         int presentFields = 0;
 
-        File outputFile = new File(output);
+        File outputFile = resolveHiddenApiFile(output);
         File outputDir = outputFile.getParentFile();
         if (outputDir != null) {
             assertTrue(outputDir.mkdirs() || outputDir.isDirectory());
@@ -220,7 +220,7 @@ public class HiddenApiBypassTest {
 
         String currentClass = null;
         Map<String, String> currentFields = new LinkedHashMap<>();
-        try (var reader = new BufferedReader(new FileReader(csv));
+        try (var reader = new BufferedReader(new FileReader(resolveHiddenApiFile(csv)));
              var writer = new BufferedWriter(new FileWriter(outputFile))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -317,8 +317,16 @@ public class HiddenApiBypassTest {
         return false;
     }
 
-    private static void assertHiddenApiPolicyDisabled() throws NoSuchFieldException {
+    private static void assertHiddenApiPolicyPermissive() throws NoSuchFieldException {
         ApplicationInfo.class.getDeclaredField("longVersionCode");
+    }
+
+    private static File resolveHiddenApiFile(String path) {
+        File file = new File(path);
+        if (file.isAbsolute()) {
+            return file;
+        }
+        return new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(), path);
     }
 
     private static int writePresentHiddenApiFields(String className,
