@@ -58,76 +58,115 @@ public final class HiddenApiBypass {
     private static final long artMethodBias;
     private static final long artFieldSize;
     private static final long artFieldBias;
-    private static final ClassLoader bootClassloader;
-    private static final long fieldDeclaringClassOffset;
-    private static final long fieldTypeOffset;
     private static final boolean instanceFieldHandleSupported;
     private static final boolean staticFieldHandleSupported;
     private static final Map<String, ClassLoader> fieldClassLoaders = new HashMap<>();
+    private static volatile long fieldDeclaringClassOffset = -1;
+    private static volatile long fieldTypeOffset = -1;
 
     static {
         try {
             //noinspection JavaReflectionMemberAccess DiscouragedPrivateApi
             unsafe = (Unsafe) Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null);
             assert unsafe != null;
-            bootClassloader = new CoreOjClassLoader();
-            Class<?> executableClass = bootClassloader.loadClass(Executable.class.getName());
-            Class<?> methodHandleClass = bootClassloader.loadClass(MethodHandle.class.getName());
-            Class<?> classClass = bootClassloader.loadClass(Class.class.getName());
-            Class<?> fieldClass = bootClassloader.loadClass(Field.class.getName());
-            methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
-            classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
-            artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
-            fieldDeclaringClassOffset = unsafe.objectFieldOffset(fieldClass.getDeclaredField("declaringClass"));
-            fieldTypeOffset = unsafe.objectFieldOffset(fieldClass.getDeclaredField("type"));
-            long iField;
-            long sField;
-            try {
-                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
-                sField = iField;
-            } catch (NoSuchFieldException e) {
-                iField = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
-                sField = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
+            long[] data = Helper.getCachedOffsetData();
+            if (data == null) {
+                data = readOffsetData(Helper.Executable.class, Helper.MethodHandle.class, Helper.Class.class);
+                Helper.setCachedOffsetData(data);
+            } else if (BuildConfig.DEBUG) {
+                Log.d(TAG, "Using cached offset data");
             }
-            iFieldOffset = iField;
-            sFieldOffset = sField;
-            methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
-            Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
-            Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
-            mA.setAccessible(true);
-            mB.setAccessible(true);
-            MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
-            MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
-            long aAddr = unsafe.getLong(mhA, artOffset);
-            long bAddr = unsafe.getLong(mhB, artOffset);
-            long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
-            artMethodSize = bAddr - aAddr;
-            if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
-                    Long.toString(aAddr, 16) + ", " +
-                    Long.toString(bAddr, 16) + ", " +
-                    Long.toString(aMethods, 16));
-            artMethodBias = aAddr - aMethods - artMethodSize;
-            Field fI = Helper.NeverCall.class.getDeclaredField("i");
-            Field fJ = Helper.NeverCall.class.getDeclaredField("j");
-            fI.setAccessible(true);
-            fJ.setAccessible(true);
-            MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
-            MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
-            long iAddr = unsafe.getLong(mhI, artOffset);
-            long jAddr = unsafe.getLong(mhJ, artOffset);
-            long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
-            artFieldSize = jAddr - iAddr;
-            if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
-                    Long.toString(iAddr, 16) + ", " +
-                    Long.toString(jAddr, 16) + ", " +
-                    Long.toString(iFields, 16));
-            artFieldBias = iAddr - iFields;
-            instanceFieldHandleSupported = isFieldHandleSupported("i", "j");
-            staticFieldHandleSupported = isFieldHandleSupported("s", "t");
+            methodOffset = data[0];
+            classOffset = data[1];
+            artOffset = data[2];
+            methodsOffset = data[3];
+            iFieldOffset = data[4];
+            sFieldOffset = data[5];
+            long[] rtData = readOffsetDataRT(artOffset, methodsOffset, iFieldOffset);
+            artMethodSize = rtData[0];
+            artMethodBias = rtData[1];
+            artFieldSize = rtData[2];
+            artFieldBias = rtData[3];
+            instanceFieldHandleSupported = Build.VERSION.SDK_INT < 37 && isFieldHandleSupported("i", "j");
+            staticFieldHandleSupported = Build.VERSION.SDK_INT < 37 && isFieldHandleSupported("s", "t");
         } catch (ReflectiveOperationException e) {
             Log.e(TAG, "Initialize error", e);
             throw new ExceptionInInitializerError(e);
         }
+    }
+
+    private static long[] readOffsetData(Class<?> executableClass, Class<?> methodHandleClass, Class<?> classClass) throws ReflectiveOperationException {
+        long methodOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("artMethod"));
+        long classOffset = unsafe.objectFieldOffset(executableClass.getDeclaredField("declaringClass"));
+        long artOffset = unsafe.objectFieldOffset(methodHandleClass.getDeclaredField("artFieldOrMethod"));
+        long methodsOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("methods"));
+        long iFieldOffset;
+        long sFieldOffset;
+        try {
+            iFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("fields"));
+            sFieldOffset = iFieldOffset;
+        } catch (NoSuchFieldException e) {
+            iFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("iFields"));
+            sFieldOffset = unsafe.objectFieldOffset(classClass.getDeclaredField("sFields"));
+            if (isMergedFields(iFieldOffset)) {
+                sFieldOffset = iFieldOffset;
+            }
+        }
+
+        return new long[]{
+                methodOffset,
+                classOffset,
+                artOffset,
+                methodsOffset,
+                iFieldOffset,
+                sFieldOffset,
+        };
+    }
+
+    private static long[] readOffsetDataRT(long artOffset, long methodsOffset, long iFieldOffset) throws ReflectiveOperationException {
+        Method mA = Helper.NeverCall.class.getDeclaredMethod("a");
+        Method mB = Helper.NeverCall.class.getDeclaredMethod("b");
+        mA.setAccessible(true);
+        mB.setAccessible(true);
+        MethodHandle mhA = MethodHandles.lookup().unreflect(mA);
+        MethodHandle mhB = MethodHandles.lookup().unreflect(mB);
+        long aAddr = unsafe.getLong(mhA, artOffset);
+        long bAddr = unsafe.getLong(mhB, artOffset);
+        long aMethods = unsafe.getLong(Helper.NeverCall.class, methodsOffset);
+        long artMethodSize = bAddr - aAddr;
+        if (BuildConfig.DEBUG) Log.v(TAG, artMethodSize + " " +
+                Long.toString(aAddr, 16) + ", " +
+                Long.toString(bAddr, 16) + ", " +
+                Long.toString(aMethods, 16));
+        long artMethodBias = aAddr - aMethods - artMethodSize;
+
+        Field fI = Helper.NeverCall.class.getDeclaredField("i");
+        Field fJ = Helper.NeverCall.class.getDeclaredField("j");
+        fI.setAccessible(true);
+        fJ.setAccessible(true);
+        MethodHandle mhI = MethodHandles.lookup().unreflectGetter(fI);
+        MethodHandle mhJ = MethodHandles.lookup().unreflectGetter(fJ);
+        long iAddr = unsafe.getLong(mhI, artOffset);
+        long jAddr = unsafe.getLong(mhJ, artOffset);
+        long iFields = unsafe.getLong(Helper.NeverCall.class, iFieldOffset);
+        long artFieldSize = jAddr - iAddr;
+        if (BuildConfig.DEBUG) Log.v(TAG, artFieldSize + " " +
+                Long.toString(iAddr, 16) + ", " +
+                Long.toString(jAddr, 16) + ", " +
+                Long.toString(iFields, 16));
+        long artFieldBias = iAddr - iFields;
+
+        return new long[]{
+                artMethodSize,
+                artMethodBias,
+                artFieldSize,
+                artFieldBias,
+        };
+    }
+
+    private static boolean isMergedFields(long fieldOffset) {
+        long fields = unsafe.getLong(Helper.NeverCall.class, fieldOffset);
+        return fields != 0 && unsafe.getInt(fields) == 4;
     }
 
     private static ClassLoader getFieldClassLoader(String path) {
@@ -138,6 +177,19 @@ public final class HiddenApiBypass {
                 fieldClassLoaders.put(path, classLoader);
             }
             return classLoader;
+        }
+    }
+
+    private static void ensureFieldOffsets() throws ReflectiveOperationException {
+        if (fieldDeclaringClassOffset >= 0) return;
+        synchronized (HiddenApiBypass.class) {
+            if (fieldDeclaringClassOffset >= 0) return;
+            ClassLoader bootClassloader = new CoreOjClassLoader();
+            Class<?> fieldClass = bootClassloader.loadClass(Field.class.getName());
+            long declaringClassOffset = unsafe.objectFieldOffset(fieldClass.getDeclaredField("declaringClass"));
+            long typeOffset = unsafe.objectFieldOffset(fieldClass.getDeclaredField("type"));
+            fieldTypeOffset = typeOffset;
+            fieldDeclaringClassOffset = declaringClassOffset;
         }
     }
 
@@ -361,6 +413,7 @@ public final class HiddenApiBypass {
     @NonNull
     private static List<Field> getFieldsFromClassLoader(@NonNull Class<?> clazz, boolean wantStatic) {
         try {
+            ensureFieldOffsets();
             Class<?> clonedClass = loadCloneClass(clazz);
             Field[] fields = clonedClass.getDeclaredFields();
             List<Field> list = new ArrayList<>(fields.length);
@@ -374,7 +427,7 @@ public final class HiddenApiBypass {
                 }
             }
             return list;
-        } catch (ClassNotFoundException | RuntimeException | LinkageError e) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Failed to materialize fields with classloader", e);
             return List.of();
         }
