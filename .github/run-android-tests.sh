@@ -56,17 +56,28 @@ wait_for_boot() {
 }
 
 configure_navigation_mode() {
-  sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+  sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r' || true)"
   case "$sdk" in
     ''|*[!0-9]*) return ;;
   esac
 
   if [ "$sdk" -ge 36 ]; then
-    adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 ||
-      adb shell "cmd overlay enable com.android.internal.systemui.navbar.threebutton && cmd overlay disable com.android.internal.systemui.navbar.gestural" >/dev/null 2>&1 ||
-      true
-    sleep 2
-    wait_for_system_services
+    for attempt in {1..10}; do
+      adb shell cmd overlay enable-exclusive --user 0 --category com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 || true
+      adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 || true
+      adb shell cmd overlay disable --user 0 com.android.internal.systemui.navbar.gestural >/dev/null 2>&1 || true
+      adb shell settings put secure navigation_mode 0 >/dev/null 2>&1 || true
+      sleep 2
+      wait_for_system_services
+      overlay_list="$(adb shell cmd overlay list --user 0 2>/dev/null | tr -d '\r' || true)"
+      if printf '%s\n' "$overlay_list" | grep -Fqx '[x] com.android.internal.systemui.navbar.threebutton'; then
+        printf '%s\n' "$overlay_list" | grep 'systemui.navbar' || true
+        return
+      fi
+    done
+    overlay_list="$(adb shell cmd overlay list --user 0 2>/dev/null | tr -d '\r' || true)"
+    printf '%s\n' "$overlay_list" | grep 'systemui.navbar' || true
+    echo "Unable to verify three-button navigation overlay; continuing with current navigation mode." >&2
   fi
 }
 
@@ -238,8 +249,8 @@ run_hiddenapi_csv_ab_test() {
 
 ./gradlew --no-configuration-cache :library:assembleDebugAndroidTest
 wait_for_boot
-configure_navigation_mode
 start_logcat_capture
+configure_navigation_mode
 adb uninstall "$test_package" || true
 install_test_package
 clear_test_package
